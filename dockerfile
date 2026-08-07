@@ -30,9 +30,12 @@ RUN composer install --optimize-autoloader --no-dev --ignore-platform-reqs
 # 8. Dar permisos (Muy importante si usas frameworks como Laravel)
 RUN chown -R www-data:www-data /var/www/html/storage /var/www/html/bootstrap/cache || true
 
-# 9. Apuntar Apache a la carpeta public (Quita el "#" de las siguientes 2 líneas si es un proyecto Laravel)
-# ENV APACHE_DOCUMENT_ROOT /var/www/html/public
-# RUN sed -ri -e 's!/var/www/html!${APACHE_DOCUMENT_ROOT}!g' /etc/apache2/sites-available/*.conf /etc/apache2/apache2.conf /etc/apache2/conf-available/*.conf
+# 9. Apuntar Apache a la carpeta public
+ENV APACHE_DOCUMENT_ROOT /var/www/html/public
+RUN sed -ri -e 's!/var/www/html!${APACHE_DOCUMENT_ROOT}!g' /etc/apache2/sites-available/*.conf /etc/apache2/apache2.conf /etc/apache2/conf-available/*.conf
 
-# 10. Exponer el puerto web
+# 10. Habilitar las rutas amigables de Laravel
+RUN a2enmod rewrite
+
+# 11. Exponer el puerto web
 EXPOSE 80
