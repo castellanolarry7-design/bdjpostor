@@ -34,8 +34,11 @@ RUN chown -R www-data:www-data /var/www/html/storage /var/www/html/bootstrap/cac
 ENV APACHE_DOCUMENT_ROOT /var/www/html/public
 RUN sed -ri -e 's!/var/www/html!${APACHE_DOCUMENT_ROOT}!g' /etc/apache2/sites-available/*.conf /etc/apache2/apache2.conf /etc/apache2/conf-available/*.conf
 
-# 10. Habilitar las rutas amigables de Laravel
+# 10. Forzar a Apache a permitir el enrutamiento de Laravel (LA LÍNEA NUEVA)
+RUN echo "\n    AllowOverride All\n" >> /etc/apache2/apache2.conf
+
+# 11. Habilitar las rutas amigables
 RUN a2enmod rewrite
 
-# 11. Exponer el puerto web
+# 12. Exponer el puerto
 EXPOSE 80
