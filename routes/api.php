@@ -19,7 +19,7 @@ Route::get('/v1/health', fn() => response()->json([
 
 // Rutas públicas
 Route::prefix('v1')->group(function () {
-    Route::post('/auth/login', [AuthController::class, 'login'])->name('auth.login');
+    Route::post('auth/login', [AuthController::class, 'login'])->name('auth.login');
 });
 
 // Rutas protegidas
