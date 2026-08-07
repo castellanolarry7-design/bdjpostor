@@ -9,10 +9,11 @@ RUN apt-get update && apt-get install -y \
     libonig-dev \
     libxml2-dev \
     zip \
-    unzip
+    unzip \
+    libpq-dev
 
 # 3. Instalar extensiones de PHP comunes para bases de datos
-RUN docker-php-ext-install pdo_mysql mbstring exif pcntl bcmath gd
+RUN docker-php-ext-install pdo_mysql mbstring exif pcntl bcmath gd pdo_pgsql pgsql
 
 # 4. Traer Composer a esta máquina
 COPY --from=composer:latest /usr/bin/composer /usr/bin/composer

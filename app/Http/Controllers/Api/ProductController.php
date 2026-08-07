@@ -74,7 +74,17 @@ class ProductController extends Controller
 
         $products = $query->paginate($request->get('per_page', 15));
 
-        return ProductResource::collection($products);
+        // En lugar de devolver la colección directamente, construimos una JsonResponse
+        // para cumplir con el tipo de retorno del método y mantener la consistencia de la API.
+        return response()->json([
+            'data' => ProductResource::collection($products->items()),
+            'meta' => [
+                'total'        => $products->total(),
+                'per_page'     => $products->perPage(),
+                'current_page' => $products->currentPage(),
+                'last_page'    => $products->lastPage(),
+            ],
+        ]);
     }
 
     /**
@@ -116,6 +126,7 @@ class ProductController extends Controller
         if (($request->stock_initial ?? 0) > 0) {
             $product->inventoryMovements()->create([
                 'id'           => Str::uuid(),
+                'product_id'   => $product->id, // <-- AÑADIR ESTA LÍNEA
                 'tenant_id'    => $tenantId,
                 'user_id'      => $user->id,
                 'type'         => 'entrada',
