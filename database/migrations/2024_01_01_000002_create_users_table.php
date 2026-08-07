@@ -19,8 +19,7 @@ return new class extends Migration {
             $table->rememberToken();
             $table->timestamps();
             $table->softDeletes();
-            $table->index('tenant_id');
-            $table->index('role');
+            $table->foreignUuid('tenant_id')->nullable()->constrained()->cascadeOnDelete();            $table->index('role');
             $table->index('active');
         });
     }

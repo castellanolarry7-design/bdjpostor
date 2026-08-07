@@ -50,7 +50,7 @@ class EnsureTenantScope
         // El super_admin no tiene tenant_id.
         // No aplicamos ningún filtro — puede ver y operar en todos los tenants.
         // TenantScope detectará que current_tenant_id es null y no filtrará.
-        if ($user->isSuperAdmin()) {
+        if ($user->role === 'super_admin') {
             app()->instance('current_tenant_id', false);
             return $next($request);
         }
