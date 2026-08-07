@@ -60,7 +60,7 @@ return new class extends Migration {
                 email TEXT NOT NULL UNIQUE,
                 email_verified_at TEXT,
                 password TEXT NOT NULL,
-                role TEXT NOT NULL DEFAULT "user" CHECK(role IN ("super_admin","admin","user")),
+                role TEXT NOT NULL DEFAULT \'user\' CHECK(role IN (\'super_admin\',\'admin\',\'user\')),
                 active INTEGER NOT NULL DEFAULT 1,
                 avatar_url TEXT,
                 last_login_at TEXT,
