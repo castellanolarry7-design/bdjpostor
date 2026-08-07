@@ -8,7 +8,7 @@ return new class extends Migration {
         // SQLite no soporta ALTER COLUMN para cambiar enums.
         // La solución es recrear la constraint usando una columna string
         // con check constraint manual.
-        DB::statement('PRAGMA foreign_keys = OFF');
+        Schema::disableForeignKeyConstraints();
 
         DB::statement('
             CREATE TABLE users_new AS SELECT * FROM users
@@ -42,12 +42,12 @@ return new class extends Migration {
         DB::statement('CREATE INDEX IF NOT EXISTS users_role_index ON users(role)');
         DB::statement('CREATE INDEX IF NOT EXISTS users_active_index ON users(active)');
 
-        DB::statement('PRAGMA foreign_keys = ON');
+        Schema::enableForeignKeyConstraints();
     }
 
     public function down(): void
     {
-        DB::statement('PRAGMA foreign_keys = OFF');
+        Schema::disableForeignKeyConstraints();
 
         DB::statement('CREATE TABLE users_new AS SELECT * FROM users');
         DB::statement('DROP TABLE users');
@@ -74,6 +74,6 @@ return new class extends Migration {
         DB::statement('INSERT INTO users SELECT * FROM users_new');
         DB::statement('DROP TABLE users_new');
 
-        DB::statement('PRAGMA foreign_keys = ON');
+        Schema::enableForeignKeyConstraints();
     }
 };
