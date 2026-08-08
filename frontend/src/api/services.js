@@ -34,6 +34,8 @@ export const productsApi = {
   list:       (params) => api.get('/products', { params }),
   get:        (id)     => api.get(`/products/${id}`),
   create:     (data)   => api.post('/products', data),
+  // Alta masiva: devuelve { created, failed, results:[{index, ok, error}] }
+  bulkCreate: (items)  => api.post('/products/bulk', { items }),
   update:     (id, data) => api.put(`/products/${id}`, data),
   destroy:    (id)     => api.delete(`/products/${id}`),
   categories: ()       => api.get('/products/categories'),

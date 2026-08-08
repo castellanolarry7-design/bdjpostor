@@ -1,10 +1,11 @@
 <!-- src/views/auth/LoginView.vue -->
 <template>
-  <div class="login-root min-h-screen flex">
+  <div class="login-root flex flex-col lg:flex-row">
 
     <!-- IZQUIERDA: logo / marca — 60% -->
-    <div class="hidden lg:flex relative overflow-hidden flex-col items-center justify-between py-14"
-         style="background:#000; width:60%; min-width:60%; flex-shrink:0;">
+    <div class="hidden lg:flex relative overflow-hidden flex-col items-center justify-between py-14
+                lg:w-[60%] lg:min-w-[60%] lg:shrink-0"
+         style="background:#000;">
 
       <div class="grid-bg absolute inset-0" />
       <div class="scan-line absolute inset-x-0 pointer-events-none" />
@@ -91,8 +92,9 @@
     </div>
 
     <!-- DERECHA: login — 40% -->
-    <div class="relative flex items-center justify-center overflow-hidden"
-         style="background:#050a14; width:40%; min-width:40%; flex-shrink:0;">
+    <div class="login-pane relative flex flex-col items-center justify-center overflow-hidden
+                w-full lg:w-[40%] lg:min-w-[40%] lg:shrink-0 px-5 py-14 lg:px-6 lg:py-0"
+         style="background:#050a14;">
 
       <!-- Grid oscuro animado -->
       <div class="right-grid absolute inset-0 pointer-events-none" />
@@ -115,13 +117,12 @@
         <AppThemeToggle />
       </div>
 
-      <!-- Logo móvil -->
-      <div class="lg:hidden absolute top-10 left-1/2 -translate-x-1/2">
-        <img src="/logo-brand.png" alt="28 STORE" class="w-20 h-20 object-contain" />
-      </div>
+      <!-- Logo móvil (en flujo, para que no se solape con la tarjeta) -->
+      <img src="/logo-brand.png" alt="28 STORE"
+           class="lg:hidden relative z-10 w-24 h-24 object-contain mb-7 shrink-0" />
 
       <!-- Card compacta -->
-      <div class="form-card relative z-10 animate-form-in" style="width:320px;">
+      <div class="form-card relative z-10 animate-form-in w-full max-w-[340px]">
 
         <div class="top-beam" />
 
@@ -242,7 +243,29 @@ async function handleLogin() {
 
 <style scoped>
 @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Share+Tech+Mono&display=swap');
-.login-root { font-family: inherit }
+.login-root {
+  font-family: inherit;
+  /* Alto real del viewport: evita el salto por la barra de Safari en iOS */
+  min-height: 100vh;
+  min-height: 100svh;
+  min-height: 100dvh;
+  width: 100%;
+  max-width: 100%;
+  overflow-x: hidden;
+}
+
+/* El panel del formulario ocupa toda la pantalla en móvil */
+.login-pane {
+  min-height: 100vh;
+  min-height: 100svh;
+  min-height: 100dvh;
+  /* Respeta el notch y la barra inferior del iPhone */
+  padding-top: max(3.5rem, env(safe-area-inset-top));
+  padding-bottom: max(3.5rem, env(safe-area-inset-bottom));
+}
+@media (min-width: 1024px) {
+  .login-pane { min-height: auto; padding-top: 0; padding-bottom: 0; }
+}
 
 /* IZQUIERDA */
 .grid-bg {
@@ -445,6 +468,16 @@ async function handleLogin() {
 .field-eye{position:absolute;right:10px;top:50%;transform:translateY(-50%);color:#3d5478;padding:4px;border-radius:3px;transition:color .2s}
 .field-eye:hover{color:#7a92b8}
 .field-error{display:flex;align-items:center;gap:4px;font-size:11px;color:#f87171;margin-top:2px}
+
+@media (max-width: 640px) {
+  .field-input {
+    font-size: 16px;
+    padding: 12px 12px 12px 38px;
+  }
+  .form-card { padding: 1.5rem 1.25rem; }
+  .submit-btn { padding: 13px; min-height: 46px; }
+  .field-eye  { padding: 8px; }
+}
 
 /* ERROR */
 .error-box{

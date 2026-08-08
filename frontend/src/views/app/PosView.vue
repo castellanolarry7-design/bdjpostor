@@ -1,6 +1,6 @@
 <!-- src/views/app/PosView.vue -->
 <template>
-  <div class="flex flex-col" style="height: calc(100vh - 56px); background: var(--bg-primary)">
+  <div class="pos-shell flex flex-col" style="background: var(--bg-primary)">
 
     <!-- ── Búsqueda / Scanner bar ──────────────────────────────────────────── -->
     <div class="shrink-0 px-3 pt-3 pb-2 space-y-2"
@@ -489,6 +489,13 @@ async function downloadReceiptPDF(saleData) {
 </script>
 
 <style scoped>
+/* Alto real descontando la barra superior. dvh evita el corte en Safari iOS */
+.pos-shell {
+  height: calc(100vh - 56px);
+  height: calc(100svh - 56px);
+  height: calc(100dvh - 56px);
+}
+
 .slide-down-enter-active, .slide-down-leave-active { transition: all 0.25s ease; overflow: hidden; }
 .slide-down-enter-from, .slide-down-leave-to { opacity: 0; max-height: 0; }
 .slide-down-enter-to, .slide-down-leave-from { opacity: 1; max-height: 400px; }

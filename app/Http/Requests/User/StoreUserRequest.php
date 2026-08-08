@@ -1,6 +1,7 @@
 <?php
 namespace App\Http\Requests\User;
 use Illuminate\Foundation\Http\FormRequest;
+use Illuminate\Validation\Rules\Password;
 
 class StoreUserRequest extends FormRequest
 {
@@ -12,7 +13,9 @@ class StoreUserRequest extends FormRequest
         return [
             'name'      => ['required', 'string', 'max:150'],
             'email'     => ['required', 'email', 'unique:users,email'],
-            'password'  => ['required', 'string', 'min:8', 'confirmed'],
+            // letters()+numbers(): mínimo razonable sin volver inusable el alta.
+            // La confirmación evita dar de alta a alguien con una errata.
+            'password'  => ['required', 'string', 'confirmed', Password::min(8)->letters()->numbers()],
             'role'      => ['required', 'in:super_admin,admin,user,cashier'],
             'tenant_id' => [$isSuperAdmin ? 'nullable' : 'prohibited', 'exists:tenants,id'],
         ];

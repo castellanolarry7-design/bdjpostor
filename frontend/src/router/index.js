@@ -2,6 +2,18 @@
 import { createRouter, createWebHistory } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 
+/**
+ * Página de inicio de cada rol. Se usa tanto en la raíz como al entrar a
+ * /login con la sesión ya abierta.
+ */
+function homeRouteFor(auth) {
+  if (!auth.isAuthenticated) return '/login'
+  const role = auth.user?.role
+  if (role === 'super_admin') return '/superadmin/tenants'
+  if (role === 'cashier')     return '/app/pos'
+  return '/app/dashboard'
+}
+
 const routes = [
   // ─── Rutas públicas ──────────────────────────────────────────────────────
   {
@@ -11,8 +23,10 @@ const routes = [
     meta: { public: true },
   },
   {
+    // La raíz decide según haya sesión o no. Antes mandaba siempre a /login,
+    // por eso al abrir una pestaña nueva parecía que la sesión se había perdido.
     path: '/',
-    redirect: '/login',
+    redirect: () => homeRouteFor(useAuthStore()),
   },
 
   // ─── Rutas SUPER ADMIN ───────────────────────────────────────────────────
@@ -98,7 +112,7 @@ const routes = [
   // ─── 404 ────────────────────────────────────────────────────────────────
   {
     path: '/:pathMatch(.*)*',
-    redirect: '/login',
+    redirect: () => homeRouteFor(useAuthStore()),
   },
 ]
 
@@ -111,8 +125,17 @@ const router = createRouter({
 router.beforeEach(async (to, from, next) => {
   const auth = useAuthStore()
 
-  // Ruta pública: dejar pasar
-  if (to.meta.public) return next()
+  // Ruta pública. Si ya hay sesión válida, no tiene sentido volver a pedir
+  // credenciales: mandamos al usuario a su pantalla de inicio.
+  if (to.meta.public) {
+    if (to.name === 'login' && auth.isAuthenticated) {
+      const target = to.query.redirect
+      return next(typeof target === 'string' && target.startsWith('/') && !target.startsWith('//')
+        ? target
+        : homeRouteFor(auth))
+    }
+    return next()
+  }
 
   // Ruta protegida sin sesión: ir al login
   if (to.meta.requiresAuth && !auth.isAuthenticated) {

@@ -10,7 +10,7 @@ use App\Http\Controllers\Api\UserController;
 use Illuminate\Support\Facades\Route;
 
 // Health check
-Route::get('/v1/health', fn() => response()->json([
+Route::middleware('throttle:60,1')->get('/v1/health', fn() => response()->json([
     'status'  => 'ok',
     'service' => 'JPStore API',
     'version' => '1.0',
@@ -19,7 +19,11 @@ Route::get('/v1/health', fn() => response()->json([
 
 // Rutas públicas
 Route::prefix('v1')->group(function () {
-    Route::post('auth/login', [AuthController::class, 'login'])->name('auth.login');
+    // throttle como segunda barrera: el AuthController ya lleva su propio
+    // contador por IP y por email, esto frena el abuso antes de tocar la base.
+    Route::post('auth/login', [AuthController::class, 'login'])
+        ->middleware('throttle:30,1')
+        ->name('auth.login');
 });
 
 // Rutas protegidas
@@ -73,6 +77,7 @@ Route::prefix('v1')
     // Admin + usuario — gestión de inventario + estadísticas POS
     Route::middleware('role:super_admin,admin,user')->group(function () {
         Route::post('/products',              [ProductController::class, 'store']);
+        Route::post('/products/bulk',         [ProductController::class, 'bulkStore']);
         Route::put('/products/{product}',     [ProductController::class, 'update']);
         Route::patch('/products/{product}',   [ProductController::class, 'update']);
         Route::delete('/products/{product}',  [ProductController::class, 'destroy']);

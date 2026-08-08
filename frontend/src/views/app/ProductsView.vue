@@ -19,9 +19,9 @@
           <QrCodeIcon class="w-4 h-4 shrink-0" />
           Escanear código
         </button>
-        <button @click="openCsvImport" class="btn-secondary flex items-center justify-center gap-2 text-sm">
-          <ArrowUpTrayIcon class="w-4 h-4 shrink-0" />
-          <span class="truncate">Importar CSV</span>
+        <button @click="bulkOpen = true" class="btn-secondary flex items-center justify-center gap-2 text-sm">
+          <TableCellsIcon class="w-4 h-4 shrink-0" />
+          <span class="truncate">Carga rápida</span>
         </button>
         <button class="btn-primary flex items-center justify-center gap-2 text-sm" @click="openCreate()">
           <PlusIcon class="w-4 h-4 shrink-0" />
@@ -304,6 +304,34 @@
       </div>
     </div>
 
+    <!-- ── HOJA DE CARGA RÁPIDA (pantalla completa) ───────────────── -->
+    <Teleport to="body">
+      <div v-if="bulkOpen" class="bulk-overlay flex flex-col">
+        <div class="flex items-center justify-between gap-3 px-4 sm:px-6 py-3.5 shrink-0"
+             style="background: var(--bg-surface); border-bottom: 1px solid var(--border)">
+          <div class="min-w-0">
+            <h3 class="text-base font-semibold truncate" style="color: var(--text-primary)">
+              Carga rápida de productos
+            </h3>
+            <p class="text-xs mt-0.5 hidden sm:block" style="color: var(--text-muted)">
+              Escribe fila tras fila, pega desde Excel o importa un CSV. Se guarda todo junto.
+            </p>
+          </div>
+          <button @click="closeBulk" class="p-2 rounded-lg shrink-0" style="color: var(--text-muted)"
+                  title="Cerrar">
+            <XMarkIcon class="w-5 h-5" />
+          </button>
+        </div>
+
+        <div class="flex-1 min-h-0 p-3 sm:p-5">
+          <BulkProductEntry
+            :categories="categories"
+            @saved="handleBulkSaved"
+          />
+        </div>
+      </div>
+    </Teleport>
+
     <!-- ── Modal ESCÁNER de código de barras ──────────────────────── -->
     <Teleport to="body">
       <Transition name="modal">
@@ -371,7 +399,8 @@
             <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div class="sm:col-span-2">
                 <label class="form-label">Nombre del producto *</label>
-                <input v-model="form.name" class="input" placeholder="Ej: Camiseta azul talla M" required />
+                <input ref="nameInput" v-model="form.name" class="input"
+                       placeholder="Ej: Camiseta azul talla M" required />
                 <p v-if="formErrors.name" class="mt-1 text-xs text-rose-500">{{ formErrors.name[0] }}</p>
               </div>
               <div>
@@ -436,12 +465,36 @@
               {{ formError }}
             </div>
 
+            <!-- Cargar varios seguidos sin reabrir el modal -->
+            <label v-if="!editingProduct"
+                   class="flex items-start gap-2.5 text-sm cursor-pointer select-none rounded-xl px-3.5 py-3"
+                   :style="keepOpen
+                     ? 'background: var(--accent-subtle); border: 1px solid rgba(59,130,246,0.3)'
+                     : 'background: var(--bg-elevated); border: 1px solid var(--border)'">
+              <input type="checkbox" v-model="keepOpen" class="w-4 h-4 rounded mt-0.5 shrink-0"
+                     style="accent-color: #3b82f6" />
+              <span>
+                <span class="font-medium" style="color: var(--text-primary)">Seguir agregando</span>
+                <span class="block text-xs mt-0.5" style="color: var(--text-muted)">
+                  No cierra la ventana al guardar. Conserva categoría, proveedor, unidad y stock
+                  mínimo, y vuelve el cursor al nombre.
+                </span>
+              </span>
+            </label>
+
             <div class="flex gap-3 pt-1">
-              <button type="button" class="btn-secondary flex-1" @click="closeModal">Cancelar</button>
+              <button type="button" class="btn-secondary flex-1" @click="closeModal">
+                {{ createdInSession && !editingProduct ? 'Terminar' : 'Cancelar' }}
+              </button>
               <button type="submit" class="btn-primary flex-1" :disabled="saving">
                 {{ saving ? 'Guardando...' : (editingProduct ? 'Actualizar' : 'Crear producto') }}
               </button>
             </div>
+
+            <p v-if="createdInSession && !editingProduct" class="text-xs text-center"
+               style="color:#34d399">
+              {{ createdInSession }} producto{{ createdInSession === 1 ? '' : 's' }} creado{{ createdInSession === 1 ? '' : 's' }} en esta tanda
+            </p>
           </form>
         </div>
       </div>
@@ -469,88 +522,19 @@
       </div>
     </Teleport>
 
-    <!-- ── CSV Import Modal ───────────────────────────────────────── -->
-    <Teleport to="body">
-      <Transition name="modal">
-        <div v-if="csvImport.open" class="fixed inset-0 z-50 flex items-center justify-center p-4 modal-backdrop" @mousedown.self="closeCsvImport">
-          <div class="modal-card w-full max-w-lg">
-            <div class="flex items-center justify-between mb-5">
-              <div>
-                <h3 class="text-base font-bold" style="color: var(--text-primary)">Importar productos CSV</h3>
-                <p class="text-xs mt-0.5" style="color: var(--text-muted)">Columnas: name*, sku, price*, cost, stock, category, min_stock</p>
-              </div>
-              <button @click="closeCsvImport"
-                      class="p-1.5 rounded-lg transition-colors"
-                      style="color: var(--text-muted)"
-                      onmouseenter="this.style.background='var(--bg-elevated)'"
-                      onmouseleave="this.style.background=''">
-                <XMarkIcon class="w-5 h-5" />
-              </button>
-            </div>
-
-            <!-- Download template link -->
-            <a href="#" @click.prevent="downloadCsvTemplate" class="inline-flex items-center gap-1.5 text-xs mb-4" style="color: #60a5fa">
-              <DocumentArrowDownIcon class="w-3.5 h-3.5" />
-              Descargar plantilla CSV
-            </a>
-
-            <!-- File drop zone -->
-            <label class="flex flex-col items-center justify-center gap-2 py-8 rounded-xl cursor-pointer transition-all mb-4"
-                   style="border: 2px dashed var(--border); background: var(--bg-elevated)"
-                   onmouseenter="this.style.borderColor='rgba(59,130,246,0.5)'" onmouseleave="this.style.borderColor='var(--border)'">
-              <ArrowUpTrayIcon class="w-8 h-8" style="color: var(--text-muted)" />
-              <span class="text-sm" style="color: var(--text-muted)">{{ csvImport.file ? csvImport.file.name : 'Seleccionar archivo CSV' }}</span>
-              <input type="file" accept=".csv" class="hidden" @change="handleCsvFile" />
-            </label>
-
-            <!-- Preview -->
-            <div v-if="csvImport.preview.length" class="mb-4">
-              <p class="text-xs font-semibold mb-2" style="color: var(--text-muted)">Vista previa (primeras 5 filas):</p>
-              <div class="rounded-xl overflow-hidden text-xs" style="border: 1px solid var(--border)">
-                <div v-for="row in csvImport.preview" :key="row._line" class="flex items-center gap-3 px-3 py-2" style="border-bottom: 1px solid var(--border)">
-                  <span class="font-medium" style="color: var(--text-primary)">{{ row.name }}</span>
-                  <span style="color: var(--text-muted)">{{ row.sku }}</span>
-                  <span class="ml-auto font-mono" style="color: #34d399">${{ row.price }}</span>
-                </div>
-              </div>
-            </div>
-
-            <!-- Errors -->
-            <div v-if="csvImport.errors.length" class="mb-4 p-3 rounded-xl text-xs space-y-1" style="background: rgba(244,63,94,0.08); border: 1px solid rgba(244,63,94,0.2)">
-              <p v-for="err in csvImport.errors" :key="err" style="color: #fca5a5">⚠ {{ err }}</p>
-            </div>
-
-            <!-- Progress -->
-            <div v-if="csvImport.importing" class="mb-4 text-center">
-              <p class="text-sm" style="color: #60a5fa">Importando... {{ csvImport.done }} productos creados</p>
-            </div>
-            <div v-if="!csvImport.importing && csvImport.done > 0 && !csvImport.errors.length" class="mb-4 text-center">
-              <p class="text-sm font-semibold" style="color: #34d399">✓ {{ csvImport.done }} productos importados correctamente</p>
-            </div>
-
-            <div class="flex gap-3">
-              <button @click="closeCsvImport" class="btn-secondary flex-1">Cancelar</button>
-              <button @click="runCsvImport" :disabled="!csvImport.file || csvImport.importing" class="btn-primary flex-1">
-                {{ csvImport.importing ? 'Importando...' : 'Importar' }}
-              </button>
-            </div>
-          </div>
-        </div>
-      </Transition>
-    </Teleport>
-
   </div>
 </template>
 
 <script setup>
-import { ref, reactive, computed, onMounted, onUnmounted } from 'vue'
+import { ref, reactive, computed, nextTick, onMounted, onUnmounted } from 'vue'
 import { useRoute } from 'vue-router'
 import BarcodeScanner from '@/components/pos/BarcodeScanner.vue'
+import BulkProductEntry from '@/components/products/BulkProductEntry.vue'
 import {
   PlusIcon, PencilIcon, TrashIcon, XMarkIcon,
   MagnifyingGlassIcon, CubeIcon, ExclamationCircleIcon,
   CurrencyDollarIcon, ExclamationTriangleIcon,
-  PencilSquareIcon, ArrowUpTrayIcon, DocumentArrowDownIcon, QrCodeIcon,
+  PencilSquareIcon, QrCodeIcon, TableCellsIcon,
 } from '@heroicons/vue/24/outline'
 import { useToast } from 'vue-toastification'
 import { productsApi, movementsApi } from '@/api/services'
@@ -570,11 +554,34 @@ const saving         = ref(false)
 const formErrors     = ref({})
 const formError      = ref('')
 const deleteTarget   = ref(null)
+
+// «Seguir agregando»: mantiene el modal abierto tras crear, para cargar tandas
+const keepOpen         = ref(false)
+const createdInSession = ref(0)
+const nameInput        = ref(null)
 const form = reactive({
   name: '', sku: '', barcode: '', category: '', description: '',
   stock_initial: 0, stock_minimum: 5,
   cost: 0, price: 0, unit: 'unidad', supplier: '',
 })
+
+// ── Hoja de carga rápida ───────────────────────────────────────────────────
+const bulkOpen    = ref(false)
+const bulkCreated = ref(0)
+
+function handleBulkSaved(count) {
+  bulkCreated.value += count
+  fetchProducts()
+  fetchCategories()
+}
+
+function closeBulk() {
+  bulkOpen.value = false
+  if (bulkCreated.value) {
+    toast.success(`${bulkCreated.value} producto(s) añadidos al inventario.`)
+    bulkCreated.value = 0
+  }
+}
 
 // ── Escáner de código de barras ────────────────────────────────────────────
 // scanner.target: 'lookup' → busca el producto y decide qué hacer
@@ -684,89 +691,6 @@ function handleOutsideClick(e) {
   if (inlineEdit.value && !e.target.closest('[data-inline-edit]')) closeInlineEdit()
 }
 
-// ── CSV Bulk Import ────────────────────────────────────────────────────────
-const csvImport = ref({ open: false, file: null, preview: [], errors: [], importing: false, done: 0 })
-
-function openCsvImport()  { csvImport.value = { open: true, file: null, preview: [], errors: [], importing: false, done: 0 } }
-function closeCsvImport() { csvImport.value.open = false }
-
-function handleCsvFile(e) {
-  const file = e.target.files[0]
-  if (!file) return
-  csvImport.value.file   = file
-  csvImport.value.errors = []
-  const reader = new FileReader()
-  reader.onload = (ev) => {
-    const text    = ev.target.result
-    const lines   = text.split('\n').filter(l => l.trim())
-    const headers = lines[0].split(',').map(h => h.trim().toLowerCase().replace(/"/g, ''))
-    const required = ['name', 'price']
-    const missing  = required.filter(r => !headers.includes(r))
-    if (missing.length) {
-      csvImport.value.errors = [`Columnas requeridas faltantes: ${missing.join(', ')}`]
-      return
-    }
-    csvImport.value.preview = lines.slice(1, 6).map((line, i) => {
-      const vals = line.split(',').map(v => v.trim().replace(/"/g, ''))
-      const row  = {}
-      headers.forEach((h, idx) => row[h] = vals[idx] || '')
-      row._line  = i + 2
-      return row
-    })
-  }
-  reader.readAsText(file)
-}
-
-async function runCsvImport() {
-  if (!csvImport.value.file) return
-  csvImport.value.importing = true
-  csvImport.value.done      = 0
-  csvImport.value.errors    = []
-  const text    = await csvImport.value.file.text()
-  const lines   = text.split('\n').filter(l => l.trim())
-  const headers = lines[0].split(',').map(h => h.trim().toLowerCase().replace(/"/g, ''))
-  const rows    = lines.slice(1)
-
-  for (const line of rows) {
-    const vals = line.split(',').map(v => v.trim().replace(/"/g, ''))
-    const row  = {}
-    headers.forEach((h, idx) => row[h] = vals[idx] || '')
-    if (!row.name) continue
-    try {
-      await productsApi.create({
-        name:          row.name,
-        sku:           row.sku       || undefined,
-        price:         parseFloat(row.price)                          || 0,
-        cost:          parseFloat(row.cost)                           || 0,
-        stock_current: parseInt(row.stock)                            || 0,
-        stock_min:     parseInt(row.min_stock || row.stock_min)       || 0,
-        category:      row.category  || undefined,
-        active:        true,
-      })
-      csvImport.value.done++
-    } catch (e) {
-      csvImport.value.errors.push(`Línea: ${row.name} — ${e.response?.data?.message || 'Error'}`)
-    }
-  }
-  csvImport.value.importing = false
-  if (!csvImport.value.errors.length) {
-    setTimeout(() => { closeCsvImport(); fetchProducts() }, 1500)
-  } else {
-    fetchProducts()
-  }
-}
-
-function downloadCsvTemplate() {
-  const csv  = 'name,sku,price,cost,stock,category,min_stock\nProducto ejemplo,SKU001,99.99,50.00,100,Electrónica,10\n'
-  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' })
-  const url  = URL.createObjectURL(blob)
-  const a    = document.createElement('a')
-  a.href     = url
-  a.download = 'plantilla_productos.csv'
-  a.click()
-  URL.revokeObjectURL(url)
-}
-
 // ── Stat computeds ────────────────────────────────────────────────────────
 const statsTotal    = computed(() => meta.value.total)
 const statsValue    = computed(() => products.value.reduce((s, p) => s + (p.stock_current || 0) * (p.cost || 0), 0))
@@ -856,6 +780,8 @@ function openCreate(eventOrBarcode) {
     scannedNotice.value = ''
   }
   formErrors.value = {}; formError.value = ''; showModal.value = true
+  createdInSession.value = 0
+  nextTick(() => nameInput.value?.focus())
 }
 
 function openEdit(product) {
@@ -865,7 +791,28 @@ function openEdit(product) {
   formErrors.value = {}; formError.value = ''; showModal.value = true
 }
 
-function closeModal() { showModal.value = false; scannedNotice.value = '' }
+function closeModal() {
+  showModal.value = false
+  scannedNotice.value = ''
+  if (createdInSession.value) {
+    toast.success(`${createdInSession.value} producto(s) creados.`)
+    createdInSession.value = 0
+  }
+}
+
+// Deja el formulario listo para el siguiente producto de la tanda:
+// se limpia lo que es único de cada artículo y se conserva el resto.
+function resetForNext() {
+  Object.assign(form, {
+    name: '', sku: '', barcode: '', description: '',
+    stock_initial: 0, cost: 0, price: 0,
+    // category, supplier, unit y stock_minimum se conservan a propósito
+  })
+  formErrors.value = {}
+  formError.value  = ''
+  scannedNotice.value = ''
+  nextTick(() => nameInput.value?.focus())
+}
 
 async function handleSave() {
   saving.value = true; formErrors.value = {}; formError.value = ''
@@ -873,11 +820,24 @@ async function handleSave() {
     if (editingProduct.value) {
       await productsApi.update(editingProduct.value.id, form)
       toast.success('Producto actualizado correctamente.')
+      closeModal()
+      await fetchProducts()
     } else {
       await productsApi.create(form)
-      toast.success('Producto creado correctamente.')
+      createdInSession.value++
+
+      if (keepOpen.value) {
+        // Seguimos en el modal: refrescamos la lista de fondo y limpiamos
+        toast.success(`«${form.name}» creado. Siguiente...`)
+        resetForNext()
+        fetchProducts()
+        fetchCategories()
+      } else {
+        toast.success('Producto creado correctamente.')
+        closeModal()
+        await fetchProducts()
+      }
     }
-    closeModal(); await fetchProducts()
   } catch (err) {
     if (err.response?.status === 422) formErrors.value = err.response.data.errors || {}
     else formError.value = err.response?.data?.message || 'Ocurrió un error.'
@@ -920,6 +880,20 @@ onUnmounted(() => {
 </script>
 
 <style scoped>
+/* Hoja de carga rápida: ocupa toda la pantalla, incluida la del teléfono */
+.bulk-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  background: var(--bg-primary);
+  height: 100vh;
+  height: 100svh;
+  height: 100dvh;
+  padding-bottom: env(safe-area-inset-bottom);
+  animation: fadeIn 0.18s ease;
+}
+@keyframes fadeIn { from { opacity: 0 } to { opacity: 1 } }
+
 @keyframes flash-border {
   0%,100% { box-shadow: 0 0 0 1px rgba(244,63,94,0.3) }
   50%      { box-shadow: 0 0 0 2px rgba(244,63,94,0.6), 0 0 8px rgba(244,63,94,0.2) }

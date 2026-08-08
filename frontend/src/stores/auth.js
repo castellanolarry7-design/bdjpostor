@@ -6,8 +6,19 @@ import router from '@/router'
 
 export const useAuthStore = defineStore('auth', () => {
   // ─── Estado ────────────────────────────────────────────────────────────
+  // Si el JSON guardado se corrompe, JSON.parse lanzaría y el store entero
+  // fallaría al crearse, dejando la app en blanco. Por eso va protegido.
+  function readStoredUser() {
+    try {
+      return JSON.parse(localStorage.getItem('jpstore_user') || 'null')
+    } catch {
+      localStorage.removeItem('jpstore_user')
+      return null
+    }
+  }
+
   const token = ref(localStorage.getItem('jpstore_token') || null)
-  const user  = ref(JSON.parse(localStorage.getItem('jpstore_user') || 'null'))
+  const user  = ref(readStoredUser())
 
   // ─── Getters ────────────────────────────────────────────────────────────
   const isAuthenticated = computed(() => !!token.value)
@@ -18,8 +29,22 @@ export const useAuthStore = defineStore('auth', () => {
   const tenantName      = computed(() => user.value?.tenant?.name)
 
   // ─── Actions ────────────────────────────────────────────────────────────
+  /**
+   * Identificador estable de este navegador. El backend nombra el token con
+   * él, así que iniciar sesión en el teléfono ya no cierra la del escritorio:
+   * solo se revoca el token de ESTE dispositivo.
+   */
+  function deviceName() {
+    let id = localStorage.getItem('jpstore_device')
+    if (!id) {
+      id = (crypto?.randomUUID?.() || `${Date.now()}-${Math.random().toString(36).slice(2)}`)
+      localStorage.setItem('jpstore_device', id)
+    }
+    return id.slice(0, 60)
+  }
+
   async function login(email, password) {
-    const { data } = await authApi.login({ email, password })
+    const { data } = await authApi.login({ email, password, device_name: deviceName() })
 
     // Persistir en memoria y localStorage
     token.value = data.token
@@ -49,15 +74,21 @@ export const useAuthStore = defineStore('auth', () => {
     }
   }
 
-  // Refrescar datos del usuario (útil al cargar la app)
+  /**
+   * Revalida la sesión contra el servidor al arrancar la app.
+   *
+   * Importante: solo cerramos sesión si el servidor responde 401 (token
+   * revocado o inválido). Ante un fallo de red o un 500 mantenemos la sesión;
+   * si no, quedarse sin internet un segundo te echaría de la aplicación.
+   */
   async function refreshUser() {
+    if (!token.value) return
     try {
       const { data } = await authApi.me()
       user.value = data.user
       localStorage.setItem('jpstore_user', JSON.stringify(data.user))
-    } catch {
-      // Token inválido — el interceptor de axios ya redirigirá al login
-      clearSession()
+    } catch (err) {
+      if (err.response?.status === 401) clearSession()
     }
   }
 
@@ -72,6 +103,6 @@ export const useAuthStore = defineStore('auth', () => {
     token, user,
     isAuthenticated, isSuperAdmin, isAdmin, isCashier,
     tenantId, tenantName,
-    login, logout, refreshUser, clearSession,
+    login, logout, refreshUser, clearSession, deviceName,
   }
 })

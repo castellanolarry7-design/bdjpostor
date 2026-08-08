@@ -35,10 +35,10 @@ class EnsureRole
 
         // Verificar si el rol del usuario está en los roles permitidos
         if (! in_array($user->role, $roles)) {
+            // No se devuelven los roles esperados ni el del usuario: es
+            // información que solo le sirve a quien está sondeando la API.
             return response()->json([
                 'message' => 'No tienes permisos para realizar esta acción.',
-                'required_roles' => $roles,
-                'your_role'      => $user->role,
             ], 403);
         }
 

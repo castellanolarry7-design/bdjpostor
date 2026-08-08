@@ -9,6 +9,8 @@ use App\Http\Resources\ProductResource;
 use App\Models\Product;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Str;
 
 /**
@@ -143,6 +145,144 @@ class ProductController extends Controller
             'message' => 'Producto creado correctamente.',
             'data'    => new ProductResource($product),
         ], 201);
+    }
+
+    /**
+     * POST /api/products/bulk
+     *
+     * Alta masiva de productos (hoja de carga rápida e importación CSV).
+     *
+     * Valida y crea fila por fila: una fila inválida NO tumba el resto.
+     * Devuelve un resultado por índice para que el frontend pueda marcar
+     * exactamente qué filas quedaron pendientes de corregir.
+     */
+    public function bulkStore(Request $request): JsonResponse
+    {
+        $user = $request->user();
+
+        $payload = $request->validate([
+            'items'             => ['required', 'array', 'min:1', 'max:500'],
+            'items.*'           => ['array'],
+            'tenant_id'         => [$user->isSuperAdmin() ? 'required' : 'prohibited', 'exists:tenants,id'],
+        ]);
+
+        $tenantId = $user->isSuperAdmin() ? $request->tenant_id : $user->tenant_id;
+
+        $results = [];
+        $created = 0;
+
+        // SKUs ya usados en este tenant, para detectar choques sin una query por fila
+        $existingSkus = Product::withTrashed()
+            ->where('tenant_id', $tenantId)
+            ->pluck('sku')
+            ->map(fn ($sku) => mb_strtolower($sku))
+            ->flip();
+
+        foreach ($payload['items'] as $index => $item) {
+            $validator = Validator::make($item, [
+                'name'          => ['required', 'string', 'max:200'],
+                'sku'           => ['required', 'string', 'max:100'],
+                'barcode'       => ['nullable', 'string', 'max:100'],
+                'category'      => ['nullable', 'string', 'max:100'],
+                'description'   => ['nullable', 'string'],
+                'stock_initial' => ['nullable', 'integer', 'min:0'],
+                'stock_minimum' => ['nullable', 'integer', 'min:0'],
+                'unit'          => ['nullable', 'string', 'max:30'],
+                'cost'          => ['nullable', 'numeric', 'min:0'],
+                'price'         => ['nullable', 'numeric', 'min:0'],
+                'supplier'      => ['nullable', 'string', 'max:200'],
+            ]);
+
+            if ($validator->fails()) {
+                $results[] = [
+                    'index'  => $index,
+                    'ok'     => false,
+                    'error'  => $validator->errors()->first(),
+                    'errors' => $validator->errors()->toArray(),
+                ];
+                continue;
+            }
+
+            $data   = $validator->validated();
+            $skuKey = mb_strtolower($data['sku']);
+
+            if ($existingSkus->has($skuKey)) {
+                $results[] = [
+                    'index' => $index,
+                    'ok'    => false,
+                    'error' => "Ya existe un producto con el SKU '{$data['sku']}'.",
+                ];
+                continue;
+            }
+
+            try {
+                $product = DB::transaction(function () use ($data, $tenantId, $user) {
+                    $stockInitial = (int) ($data['stock_initial'] ?? 0);
+
+                    $product = Product::create([
+                        'id'            => Str::uuid(),
+                        'tenant_id'     => $tenantId,
+                        'name'          => $data['name'],
+                        'sku'           => $data['sku'],
+                        'barcode'       => $data['barcode']     ?? null,
+                        'category'      => $data['category']    ?? null,
+                        'description'   => $data['description'] ?? null,
+                        'stock_current' => $stockInitial,
+                        'stock_minimum' => (int) ($data['stock_minimum'] ?? 5),
+                        'unit'          => $data['unit']  ?? 'unidad',
+                        'cost'          => $data['cost']  ?? 0,
+                        'price'         => $data['price'] ?? 0,
+                        'supplier'      => $data['supplier'] ?? null,
+                        'active'        => true,
+                    ]);
+
+                    if ($stockInitial > 0) {
+                        $product->inventoryMovements()->create([
+                            'id'           => Str::uuid(),
+                            'product_id'   => $product->id,
+                            'tenant_id'    => $tenantId,
+                            'user_id'      => $user->id,
+                            'type'         => 'entrada',
+                            'quantity'     => $stockInitial,
+                            'stock_before' => 0,
+                            'stock_after'  => $stockInitial,
+                            'unit_cost'    => $data['cost'] ?? 0,
+                            'note'         => 'Stock inicial (carga masiva).',
+                            'moved_at'     => now(),
+                        ]);
+                    }
+
+                    return $product;
+                });
+
+                $existingSkus->put($skuKey, true);
+                $created++;
+
+                $results[] = [
+                    'index' => $index,
+                    'ok'    => true,
+                    'data'  => new ProductResource($product),
+                ];
+            } catch (\Throwable $e) {
+                report($e);
+                $results[] = [
+                    'index' => $index,
+                    'ok'    => false,
+                    'error' => 'No se pudo guardar esta fila.',
+                ];
+            }
+        }
+
+        $failed = count($results) - $created;
+
+        return response()->json([
+            'message' => $failed === 0
+                ? "Se crearon {$created} productos."
+                : "Se crearon {$created} productos y {$failed} filas quedaron con errores.",
+            'created' => $created,
+            'failed'  => $failed,
+            'results' => $results,
+        ], $created > 0 ? 201 : 422);
     }
 
     /**

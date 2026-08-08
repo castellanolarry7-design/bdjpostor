@@ -9,9 +9,16 @@ use App\Models\User;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\RateLimiter;
 
 class AuthController extends Controller
 {
+    /**
+     * Hash de descarte para que la comprobación de contraseña tarde lo mismo
+     * exista o no el usuario. Es un bcrypt válido de una cadena aleatoria.
+     */
+    private const DUMMY_HASH = '$2y$12$usesomesillystringfore7hnbRJHxXVLeakoG8K30oukPsA.ztMG';
+
     /**
      * POST /api/auth/login
      *
@@ -20,7 +27,6 @@ class AuthController extends Controller
      * Request body:
      * {
      *   "email": "user@example.com",
-     * ddgit ad
      *   "password": "secret123",
      *   "device_name": "Chrome/Windows" (opcional)
      * }
@@ -35,42 +41,72 @@ class AuthController extends Controller
      */
     public function login(LoginRequest $request): JsonResponse
     {
-        // Buscar usuario por email. El `LoginRequest` ya valida que el email existe.
-        $user = User::firstWhere('email', $request->email);
+        $email = mb_strtolower(trim($request->email));
 
-        // Verificar que el usuario existe y la contraseña es correcta
-        if (! $user || ! Hash::check($request->password, $user->password)) {
+        // ─── Límite de intentos ──────────────────────────────────────────
+        // Doble llave: por IP (frena escaneos masivos) y por email
+        // (frena el ataque dirigido a una cuenta concreta desde muchas IPs).
+        $ipKey    = 'login:ip:' . $request->ip();
+        $userKey  = 'login:user:' . sha1($email);
+
+        foreach ([[$ipKey, 20], [$userKey, 5]] as [$key, $max]) {
+            if (RateLimiter::tooManyAttempts($key, $max)) {
+                $seconds = RateLimiter::availableIn($key);
+
+                return response()->json([
+                    'message'     => "Demasiados intentos fallidos. Vuelve a intentarlo en {$seconds} segundos.",
+                    'retry_after' => $seconds,
+                ], 429);
+            }
+        }
+
+        $user = User::firstWhere('email', $email);
+
+        // Hash::check se ejecuta SIEMPRE, exista o no el usuario. Si solo se
+        // comprobara cuando existe, el tiempo de respuesta delataría qué
+        // correos están registrados (ataque de tiempo / enumeración).
+        $hash      = $user->password ?? self::DUMMY_HASH;
+        $validPass = Hash::check($request->password, $hash);
+
+        if (! $user || ! $validPass) {
+            RateLimiter::hit($ipKey, 900);    // ventana de 15 minutos
+            RateLimiter::hit($userKey, 900);
+
             return response()->json([
                 'message' => 'Credenciales incorrectas.',
             ], 401);
         }
 
-        // Verificar que el usuario está activo
-        if (! $user->active) {
+        // Credenciales correctas: se limpia el contador
+        RateLimiter::clear($ipKey);
+        RateLimiter::clear($userKey);
+
+        // Cuenta o empresa inactivas. Se responde lo mismo en ambos casos para
+        // no confirmar qué correos existen ni a qué empresa pertenecen.
+        if (! $user->active || ($user->tenant_id && $user->tenant && ! $user->tenant->active)) {
             return response()->json([
-                'message' => 'Tu cuenta está desactivada. Contacta al administrador.',
+                'message' => 'Tu acceso está deshabilitado. Contacta al administrador.',
             ], 403);
         }
 
-        // Si tiene tenant, verificar que el tenant también está activo
-        if ($user->tenant_id && $user->tenant && ! $user->tenant->active) {
-            return response()->json([
-                'message' => 'Tu empresa está inactiva. Contacta a soporte JPStore.',
-            ], 403);
-        }
-
-        // Revocar tokens anteriores del mismo dispositivo (evitar tokens huérfanos)
-        // En producción podrías querer mantener múltiples tokens (multi-device)
-        $user->tokens()->where('name', $request->device_name ?? 'api')->delete();
+        // Solo se revoca el token de ESTE dispositivo. Antes se borraban todos
+        // los llamados 'api', así que entrar desde el móvil cerraba la sesión
+        // del escritorio.
+        $deviceName = $this->resolveDeviceName($request);
+        $user->tokens()->where('name', $deviceName)->delete();
 
         // Crear nuevo token Sanctum
         // Las "abilities" definen qué puede hacer el token (útil para tokens limitados)
         $abilities = $this->resolveAbilities($user->role);
 
+        // Sin caducidad: la sesión dura hasta que se cierre en el dispositivo,
+        // que es el comportamiento pedido. La contrapartida es que un token
+        // robado vale para siempre, así que se revoca en cuanto el usuario se
+        // desactiva, se elimina o cambia su contraseña (ver UserController).
         $token = $user->createToken(
-            name: $request->device_name ?? 'api',
+            name: $deviceName,
             abilities: $abilities,
-            expiresAt: null // El token no expira
+            expiresAt: null
         );
 
         // Actualizar último login
@@ -95,7 +131,7 @@ class AuthController extends Controller
     public function logout(Request $request): JsonResponse
     {
         // Revocar solo el token actual (no todos los dispositivos)
-        $request->user()->currentAccessToken()->delete();
+        $request->user()?->currentAccessToken()?->delete();
 
         return response()->json([
             'message' => 'Sesión cerrada correctamente.',
@@ -115,6 +151,18 @@ class AuthController extends Controller
         return response()->json([
             'user' => new UserResource($user),
         ], 200);
+    }
+
+    /**
+     * Nombre del token = identificador del dispositivo.
+     * Se sanea porque acaba en la base de datos y se compara en consultas.
+     */
+    private function resolveDeviceName(Request $request): string
+    {
+        $raw = (string) $request->input('device_name', '');
+        $clean = preg_replace('/[^A-Za-z0-9._-]/', '', $raw);
+
+        return $clean !== '' ? mb_substr($clean, 0, 60) : 'api';
     }
 
     /**

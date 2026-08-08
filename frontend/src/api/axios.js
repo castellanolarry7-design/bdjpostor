@@ -1,6 +1,7 @@
 // src/api/axios.js
 import axios from 'axios'
 import { useAuthStore } from '@/stores/auth'
+import router from '@/router'
 
 // Crear instancia base apuntando al backend Laravel
 const api = axios.create({
@@ -37,14 +38,21 @@ api.interceptors.response.use(
   (error) => {
     const status = error.response?.status
 
-    // 401 — Token expirado o inválido
-    // Solo redirigir si NO es el endpoint de login (para que LoginView pueda mostrar el error)
-    if (status === 401 && !error.config.url.includes('/auth/login')) {
-      const authStore = useAuthStore()
-      // Usar el método logout del store para limpiar el estado de forma centralizada
-      // y evitar recargas de página completas.
-      authStore.logout()
+    // 401 — Token revocado o inválido.
+    // Excluimos /auth/login (para que la pantalla muestre el error) y
+    // /auth/logout (si no, cerrar sesión con un token ya muerto entraría en
+    // un bucle: logout → 401 → logout → ...).
+    const url = error.config?.url || ''
+    const isAuthEndpoint = url.includes('/auth/login') || url.includes('/auth/logout')
 
+    if (status === 401 && !isAuthEndpoint) {
+      const authStore = useAuthStore()
+      // Limpiamos la sesión local sin volver a llamar a la API: el token ya
+      // no sirve, no hay nada que revocar en el servidor.
+      authStore.clearSession()
+      if (router.currentRoute.value.name !== 'login') {
+        router.push({ name: 'login', query: { redirect: router.currentRoute.value.fullPath } })
+      }
       return Promise.reject(error)
     }
 
@@ -66,15 +74,27 @@ api.interceptors.response.use(
   }
 )
 
-// ─── SINCRONIZACIÓN DE PESTAÑAS ───────────────────────────────────────────
-// Escucha los cambios en localStorage para mantener la sesión sincronizada
-// entre pestañas. Si el token se elimina en una pestaña (logout), las
-// otras pestañas reaccionarán y cerrarán la sesión también.
+// ─── SINCRONIZACIÓN ENTRE PESTAÑAS ────────────────────────────────────────
+// El evento 'storage' solo llega a las OTRAS pestañas, nunca a la que hizo el
+// cambio. Lo usamos para propagar el cierre de sesión y también el inicio.
 window.addEventListener('storage', (event) => {
-  if (event.key === 'jpstore_token' && !event.newValue) {
-    console.log('Token eliminado en otra pestaña. Cerrando sesión local.')
-    const authStore = useAuthStore()
-    authStore.logout()
+  if (event.key !== 'jpstore_token') return
+
+  const authStore = useAuthStore()
+
+  // Cerraron sesión en otra pestaña → limpiamos aquí también.
+  // Ojo: clearSession, NO logout. logout llamaría otra vez a la API y cada
+  // pestaña dispararía el evento en cadena.
+  if (!event.newValue) {
+    authStore.clearSession()
+    if (router.currentRoute.value.name !== 'login') router.push({ name: 'login' })
+    return
+  }
+
+  // Iniciaron sesión en otra pestaña → adoptamos el token sin recargar.
+  if (event.newValue !== authStore.token) {
+    authStore.token = event.newValue
+    authStore.refreshUser()
   }
 })
 

@@ -5,38 +5,36 @@
     <!-- ─── Header ──────────────────────────────────────────────────────── -->
     <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
       <div>
-        <h2 class="text-2xl font-bold" style="color: var(--text-primary)">Reportes</h2>
+        <h2 class="text-xl sm:text-2xl font-bold" style="color: var(--text-primary)">Reportes</h2>
         <p class="text-sm mt-0.5" style="color: var(--text-muted)">
           Análisis de ventas e inventario por período
         </p>
       </div>
 
       <!-- Controls -->
-      <div class="flex flex-wrap items-center gap-2">
-        <div class="flex items-center gap-1.5">
+      <div class="grid grid-cols-2 sm:flex sm:flex-wrap sm:items-center gap-2 w-full sm:w-auto">
+        <div class="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-1.5 min-w-0">
           <label class="text-xs font-medium" style="color: var(--text-muted)">Desde</label>
           <input
             v-model="from"
             type="date"
-            class="input !py-1.5 !text-xs"
-            style="width: 140px"
+            class="input !py-1.5 !text-xs w-full sm:w-[140px] min-w-0"
           />
         </div>
-        <div class="flex items-center gap-1.5">
+        <div class="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-1.5 min-w-0">
           <label class="text-xs font-medium" style="color: var(--text-muted)">Hasta</label>
           <input
             v-model="to"
             type="date"
-            class="input !py-1.5 !text-xs"
-            style="width: 140px"
+            class="input !py-1.5 !text-xs w-full sm:w-[140px] min-w-0"
           />
         </div>
         <button class="btn-secondary !text-xs !py-2 gap-2" @click="generate" :disabled="loading">
-          <ArrowPathIcon class="w-3.5 h-3.5" :class="loading && 'animate-spin'" />
+          <ArrowPathIcon class="w-3.5 h-3.5 shrink-0" :class="loading && 'animate-spin'" />
           {{ loading ? 'Cargando...' : 'Generar' }}
         </button>
         <button class="btn-primary !text-xs !py-2 gap-2" @click="exportPDF" :disabled="loading || !kpis.count">
-          <DocumentArrowDownIcon class="w-3.5 h-3.5" />
+          <DocumentArrowDownIcon class="w-3.5 h-3.5 shrink-0" />
           Exportar PDF
         </button>
       </div>

@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Api;
 
+use App\Exceptions\StockInsuficienteException;
 use App\Http\Controllers\Controller;
 use App\Models\InventoryMovement;
 use App\Models\Product;
@@ -62,8 +63,10 @@ class PosController extends Controller
         $validated = $request->validate([
             'items'                     => ['required', 'array', 'min:1'],
             'items.*.product_id'        => ['required', 'string'],
-            'items.*.quantity'          => ['required', 'integer', 'min:1'],
-            'items.*.unit_price'        => ['required', 'numeric', 'min:0'],
+            'items.*.quantity'          => ['required', 'integer', 'min:1', 'max:100000'],
+            // unit_price ya NO se acepta del cliente: el precio sale de la base
+            // de datos. Solo se admite un descuento explícito y acotado.
+            'items.*.discount_percent'  => ['nullable', 'numeric', 'min:0', 'max:100'],
             'payments'                  => ['required', 'array', 'min:1'],
             'payments.*.method'         => ['required', 'string'],
             'payments.*.currency'       => ['required', 'string'],
@@ -80,10 +83,21 @@ class PosController extends Controller
         try {
             DB::transaction(function () use ($validated, $user, $tenantId, &$sale) {
 
-                // Generar número de venta único
-                $date       = now()->format('ymd');
-                $count      = Sale::whereDate('sold_at', today())->count();
-                $saleNumber = 'JS-' . $date . '-' . str_pad($count + 1, 4, '0', STR_PAD_LEFT);
+                // Número de venta correlativo del día para esta empresa.
+                // TenantScope ya limita el conteo a la empresa actual; el bucle
+                // cubre el caso de dos cajas cobrando en el mismo instante.
+                $date  = now()->format('ymd');
+                $count = Sale::whereDate('sold_at', today())->count();
+
+                $saleNumber = null;
+                for ($i = 1; $i <= 20; $i++) {
+                    $candidate = 'JS-' . $date . '-' . str_pad($count + $i, 4, '0', STR_PAD_LEFT);
+                    if (! Sale::where('sale_number', $candidate)->exists()) {
+                        $saleNumber = $candidate;
+                        break;
+                    }
+                }
+                $saleNumber ??= 'JS-' . $date . '-' . strtoupper(Str::random(6));
 
                 // Procesar cada item
                 $subtotal  = 0;
@@ -93,10 +107,23 @@ class PosController extends Controller
                     $product = Product::lockForUpdate()->findOrFail($itemData['product_id']);
 
                     if ($product->stock_current < $itemData['quantity']) {
-                        throw new \Exception("Stock insuficiente para '{$product->name}'. Disponible: {$product->stock_current}");
+                        throw new StockInsuficienteException(
+                            "Stock insuficiente para '{$product->name}'. Disponible: {$product->stock_current}"
+                        );
                     }
 
-                    $itemSubtotal = round($itemData['unit_price'] * $itemData['quantity'], 2);
+                    // ─── El precio es el del servidor, nunca el del cliente ───
+                    // Antes se guardaba items.*.unit_price tal cual, así que
+                    // cualquiera con un token válido podía cobrar un artículo
+                    // de 500 a 0,01 y el sistema lo registraba como venta real.
+                    $unitPrice = (float) $product->price;
+
+                    $descuento = (float) ($itemData['discount_percent'] ?? 0);
+                    if ($descuento > 0) {
+                        $unitPrice = round($unitPrice * (1 - $descuento / 100), 2);
+                    }
+
+                    $itemSubtotal = round($unitPrice * $itemData['quantity'], 2);
                     $subtotal    += $itemSubtotal;
 
                     $stockBefore = $product->stock_current;
@@ -113,7 +140,7 @@ class PosController extends Controller
                         'quantity'     => $itemData['quantity'],
                         'stock_before' => $stockBefore,
                         'stock_after'  => $stockAfter,
-                        'unit_price'   => $itemData['unit_price'],
+                        'unit_price'   => $unitPrice,
                         'note'         => "Venta POS #{$saleNumber}",
                         'reference'    => $saleNumber,
                         'moved_at'     => now(),
@@ -122,7 +149,7 @@ class PosController extends Controller
                     $saleItems[] = [
                         'product'    => $product,
                         'quantity'   => $itemData['quantity'],
-                        'unit_price' => $itemData['unit_price'],
+                        'unit_price' => $unitPrice,
                         'subtotal'   => $itemSubtotal,
                     ];
                 }
@@ -163,8 +190,14 @@ class PosController extends Controller
                     ]);
                 }
             });
-        } catch (\Exception $e) {
+        } catch (StockInsuficienteException $e) {
+            // Mensaje de negocio: seguro de mostrar al cajero
             return response()->json(['message' => $e->getMessage()], 422);
+        } catch (\Throwable $e) {
+            // Cualquier otra cosa (fallo de base de datos, etc.) se registra
+            // pero no se devuelve: los mensajes internos revelan estructura.
+            report($e);
+            return response()->json(['message' => 'No se pudo registrar la venta. Inténtalo de nuevo.'], 500);
         }
 
         return response()->json([
@@ -276,8 +309,9 @@ class PosController extends Controller
 
                 $sale->update(['status' => 'voided']);
             });
-        } catch (\Exception $e) {
-            return response()->json(['message' => $e->getMessage()], 422);
+        } catch (\Throwable $e) {
+            report($e);
+            return response()->json(['message' => 'No se pudo anular la venta. Inténtalo de nuevo.'], 500);
         }
 
         return response()->json([

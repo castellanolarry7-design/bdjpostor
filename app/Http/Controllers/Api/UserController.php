@@ -31,7 +31,9 @@ class UserController extends Controller
     public function index(Request $request): JsonResponse
     {
         $authUser = $request->user();
-        $query    = User::query()->with('tenant');
+        $this->authorize('viewAny', User::class);
+
+        $query = User::query()->with('tenant');
 
         // ─── Control de acceso por rol ───────────────────────────────────
 
@@ -45,8 +47,10 @@ class UserController extends Controller
                 $query->where('role', '!=', 'super_admin');
             }
         } else {
-            // Admin/user solo ve usuarios de su propio tenant
-            $query->where('tenant_id', $authUser->tenant_id);
+            // Admin solo ve usuarios de su propia empresa, y nunca super_admins
+            // (ni siquiera para saber que existen).
+            $query->where('tenant_id', $authUser->tenant_id)
+                  ->where('role', '!=', 'super_admin');
         }
 
         // ─── Filtros ─────────────────────────────────────────────────────
@@ -93,24 +97,27 @@ class UserController extends Controller
         // Usar la policy para verificar si el usuario puede crear usuarios con los datos proporcionados
         $this->authorize('create', [User::class, $request->all()]);
 
-        // Determinar el tenant_id del nuevo usuario
-        if ($authUser->isSuperAdmin()) {
-            // Super admin especifica el tenant en el body
-            $tenantId = $request->tenant_id ?? null;
-        } else {
-            // Admin: el tenant es siempre el suyo propio
-            $tenantId = $authUser->tenant_id;
+        // El tenant NO se toma del body salvo para el super admin: si no, un
+        // admin podría crear usuarios dentro de otra empresa.
+        $tenantId = $authUser->isSuperAdmin()
+            ? ($request->tenant_id ?? null)
+            : $authUser->tenant_id;
+
+        // Segunda barrera, además de la policy: un admin jamás crea super_admins.
+        $role = $request->role ?? 'user';
+        if (! $authUser->isSuperAdmin() && $role === 'super_admin') {
+            abort(403, 'No puedes crear usuarios con ese rol.');
         }
 
         $user = User::create([
             'id'        => Str::uuid(),
             'tenant_id' => $tenantId,
             'name'      => $request->name,
-            'email'     => $request->email,
+            'email'     => mb_strtolower(trim($request->email)),
             'password'  => $request->password, // El cast 'hashed' en el modelo lo encripta
-            'role'      => $request->role ?? 'user',
+            'role'      => $role,
             'active'    => true,
-            'email_verified_at' => now(), // En MVP verificamos automáticamente
+            'email_verified_at' => now(),
         ]);
 
         return response()->json([
@@ -150,7 +157,25 @@ class UserController extends Controller
 
         // La policy se encarga de verificar si el usuario autenticado puede actualizar el $user
         $this->authorize('update', [$user, $request->all()]);
-        $user->update($request->validated());
+
+        $data = $request->validated();
+
+        // Cambiar la contraseña, el rol o la empresa invalida las sesiones
+        // abiertas: si el token se filtró, seguiría sirviendo para siempre
+        // (los tokens no caducan por diseño).
+        $revocar = array_key_exists('password', $data)
+                || (array_key_exists('role', $data)      && $data['role']      !== $user->role)
+                || (array_key_exists('tenant_id', $data) && $data['tenant_id'] !== $user->tenant_id);
+
+        if (array_key_exists('email', $data)) {
+            $data['email'] = mb_strtolower(trim($data['email']));
+        }
+
+        $user->update($data);
+
+        if ($revocar) {
+            $user->tokens()->delete();
+        }
 
         return response()->json([
             'message' => 'Usuario actualizado correctamente.',
@@ -171,6 +196,13 @@ class UserController extends Controller
         $this->authorize('toggleActive', $user);
 
         $user->update(['active' => ! $user->active]);
+
+        // Desactivar debe surtir efecto ya: sin esto, el usuario seguiría
+        // operando con el token que ya tenía en la mano.
+        if (! $user->active) {
+            $user->tokens()->delete();
+        }
+
         $status = $user->active ? 'activado' : 'desactivado';
 
         return response()->json([
@@ -191,6 +223,7 @@ class UserController extends Controller
         // La policy se encarga de verificar si se puede eliminar y si no es el mismo usuario
         $this->authorize('delete', $user);
 
+        $user->tokens()->delete();   // cerrar sus sesiones antes de borrarlo
         $user->delete();
 
         return response()->json([
