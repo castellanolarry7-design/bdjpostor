@@ -15,11 +15,11 @@
           <ArrowUpTrayIcon class="w-4 h-4" />
           Importar CSV
         </button>
-        <RouterLink :to="{ name: 'product-scan' }" class="btn-success flex items-center gap-2">
+        <RouterLink :to="{ name: 'product-scan' }" class="btn-success flex items-center gap-2 text-sm">
           <QrCodeIcon class="w-4 h-4" />
           Escanear
         </RouterLink>
-        <button class="btn-primary flex items-center gap-2" @click="openCreate">
+        <button class="btn-primary flex items-center gap-2" @click="openCreate()">
           <PlusIcon class="w-4 h-4" />
           Nuevo producto
         </button>
@@ -726,7 +726,7 @@ function openCreate(eventOrBarcode) {
   Object.assign(form, { name: '', sku: '', barcode: '', category: '', stock_initial: 0, stock_minimum: 5, cost: 0, price: 0, unit: 'unidad', supplier: '' })
   // Si el argumento es un string (viene del escáner), lo usamos.
   // Si es un evento de clic, lo ignoramos.
-  const barcode = typeof eventOrBarcode === 'string' ? eventOrBarcode : ''
+  const barcode = (typeof eventOrBarcode === 'string' || typeof eventOrBarcode === 'number') ? eventOrBarcode : ''
   if (barcode) form.barcode = barcode
   formErrors.value = {}; formError.value = ''; showModal.value = true
 }
@@ -780,7 +780,7 @@ onMounted(() => {
   fetchProducts()
   fetchCategories()
   document.addEventListener('click', handleOutsideClick)
-  // Si la URL tiene el parámetro 'barcode', abrir el modal de creación con ese código
+  // Si la URL tiene el parámetro 'barcode' y el modal no está abierto, abrir el modal de creación con ese código
   if (route.params.barcode && !showModal.value) {
     openCreate(route.params.barcode)
   }
