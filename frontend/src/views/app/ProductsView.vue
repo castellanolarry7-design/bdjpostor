@@ -10,7 +10,7 @@
           {{ meta.total }} {{ meta.total === 1 ? 'producto' : 'productos' }} en tu inventario
         </p>
       </div>
-      <div class="flex items-center gap-2 self-start sm:self-auto">
+      <div class="flex items-center gap-2 self-start sm:self-auto flex-wrap">
         <button @click="openCsvImport" class="btn-secondary flex items-center gap-2 text-sm">
           <ArrowUpTrayIcon class="w-4 h-4" />
           Importar CSV
@@ -27,7 +27,7 @@
     </div>
 
     <!-- Stat cards -->
-    <div class="grid grid-cols-3 gap-3">
+    <div class="grid grid-cols-2 sm:grid-cols-3 gap-3">
       <div class="card-kpi">
         <div class="flex items-center gap-2 mb-1">
           <div class="w-7 h-7 rounded-lg flex items-center justify-center shrink-0"
@@ -303,7 +303,7 @@
     <!-- ── Modal crear/editar ─────────────────────────────────────── -->
     <Teleport to="body">
       <div v-if="showModal" class="modal-backdrop" @mousedown.self="closeModal">
-        <div class="modal-card w-full max-w-lg">
+        <div class="modal-card w-full max-w-lg flex flex-col max-h-[90vh] sm:max-h-[85vh]">
           <div class="flex items-center justify-between px-6 py-5" style="border-bottom: 1px solid var(--border)">
             <h3 class="text-base font-semibold" style="color: var(--text-primary)">
               {{ editingProduct ? 'Editar producto' : 'Nuevo producto' }}
@@ -317,7 +317,7 @@
             </button>
           </div>
 
-          <form @submit.prevent="handleSave" class="p-6 space-y-4 overflow-y-auto max-h-[70vh]">
+          <form @submit.prevent="handleSave" class="p-6 space-y-4 overflow-y-auto">
             <div class="grid grid-cols-2 gap-4">
               <div class="col-span-2">
                 <label class="form-label">Nombre del producto *</label>
