@@ -20,6 +20,7 @@ class AuthController extends Controller
      * Request body:
      * {
      *   "email": "user@example.com",
+     * ddgit ad
      *   "password": "secret123",
      *   "device_name": "Chrome/Windows" (opcional)
      * }
