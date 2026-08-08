@@ -3,25 +3,29 @@
   <div class="space-y-5 animate-fade-up">
 
     <!-- Header -->
-    <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-      <div>
-        <h2 class="text-2xl font-bold" style="color: var(--text-primary)">Productos</h2>
-        <p class="text-sm mt-0.5" style="color: var(--text-muted)">
+    <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 sm:gap-4">
+      <div class="min-w-0">
+        <h2 class="text-xl sm:text-2xl font-bold" style="color: var(--text-primary)">Productos</h2>
+        <p class="text-xs sm:text-sm mt-0.5" style="color: var(--text-muted)">
           {{ meta.total }} {{ meta.total === 1 ? 'producto' : 'productos' }} en tu inventario
         </p>
       </div>
-      <div class="flex items-center gap-2 self-start sm:self-auto flex-wrap">
-        <button @click="openCsvImport" class="btn-secondary flex items-center gap-2 text-sm">
-          <ArrowUpTrayIcon class="w-4 h-4" />
-          Importar CSV
+      <div class="grid grid-cols-2 sm:flex sm:items-center gap-2 w-full sm:w-auto">
+        <!-- Escanear: destacado y a ancho completo en móvil -->
+        <button
+          @click="openScanner"
+          class="btn-success col-span-2 sm:col-span-1 flex items-center justify-center gap-2 text-sm"
+        >
+          <QrCodeIcon class="w-4 h-4 shrink-0" />
+          Escanear código
         </button>
-        <RouterLink :to="{ name: 'product-scan' }" class="btn-success flex items-center gap-2 text-sm">
-          <QrCodeIcon class="w-4 h-4" />
-          Escanear
-        </RouterLink>
-        <button class="btn-primary flex items-center gap-2" @click="openCreate()">
-          <PlusIcon class="w-4 h-4" />
-          Nuevo producto
+        <button @click="openCsvImport" class="btn-secondary flex items-center justify-center gap-2 text-sm">
+          <ArrowUpTrayIcon class="w-4 h-4 shrink-0" />
+          <span class="truncate">Importar CSV</span>
+        </button>
+        <button class="btn-primary flex items-center justify-center gap-2 text-sm" @click="openCreate()">
+          <PlusIcon class="w-4 h-4 shrink-0" />
+          <span class="truncate">Nuevo</span>
         </button>
       </div>
     </div>
@@ -300,6 +304,44 @@
       </div>
     </div>
 
+    <!-- ── Modal ESCÁNER de código de barras ──────────────────────── -->
+    <Teleport to="body">
+      <Transition name="modal">
+        <div v-if="scanner.open" class="modal-backdrop" @mousedown.self="closeScanner">
+          <div class="modal-card w-full max-w-md overflow-hidden">
+            <div class="flex items-center justify-between px-5 py-4" style="border-bottom: 1px solid var(--border)">
+              <div class="min-w-0">
+                <h3 class="text-base font-semibold" style="color: var(--text-primary)">Escanear producto</h3>
+                <p class="text-xs mt-0.5" style="color: var(--text-muted)">
+                  Apunta la cámara al código de barras o QR
+                </p>
+              </div>
+              <button @click="closeScanner" class="p-1.5 rounded-lg shrink-0" style="color: var(--text-muted)">
+                <XMarkIcon class="w-5 h-5" />
+              </button>
+            </div>
+
+            <div class="p-4 space-y-3">
+              <!-- Cámara -->
+              <BarcodeScanner v-if="scanner.open" @scanned="handleScanned" />
+
+              <!-- Estado de la búsqueda -->
+              <div v-if="scanner.looking"
+                   class="flex items-center gap-2 text-sm px-3.5 py-3 rounded-xl"
+                   style="background: var(--accent-subtle); color: var(--accent-hover)">
+                <span class="w-3.5 h-3.5 rounded-full border-2 border-current border-t-transparent animate-spin" />
+                Buscando <span class="font-mono">{{ scanner.lastCode }}</span>...
+              </div>
+
+              <p v-else class="text-xs text-center" style="color: var(--text-muted)">
+                Si el producto no existe, se abrirá el formulario con el código ya cargado.
+              </p>
+            </div>
+          </div>
+        </div>
+      </Transition>
+    </Teleport>
+
     <!-- ── Modal crear/editar ─────────────────────────────────────── -->
     <Teleport to="body">
       <div v-if="showModal" class="modal-backdrop" @mousedown.self="closeModal">
@@ -317,9 +359,17 @@
             </button>
           </div>
 
-          <form @submit.prevent="handleSave" class="p-6 space-y-4 overflow-y-auto">
-            <div class="grid grid-cols-2 gap-4">
-              <div class="col-span-2">
+          <form @submit.prevent="handleSave" class="p-4 sm:p-6 space-y-4 overflow-y-auto">
+            <!-- Aviso cuando el formulario viene de un escaneo -->
+            <div v-if="scannedNotice"
+                 class="flex items-start gap-2 text-sm px-3.5 py-3 rounded-xl"
+                 style="background: rgba(16,185,129,0.08); border: 1px solid rgba(16,185,129,0.25); color: #34d399">
+              <QrCodeIcon class="w-4 h-4 shrink-0 mt-0.5" />
+              <span>Código escaneado: <strong class="font-mono">{{ scannedNotice }}</strong>. Completa el resto de los datos.</span>
+            </div>
+
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div class="sm:col-span-2">
                 <label class="form-label">Nombre del producto *</label>
                 <input v-model="form.name" class="input" placeholder="Ej: Camiseta azul talla M" required />
                 <p v-if="formErrors.name" class="mt-1 text-xs text-rose-500">{{ formErrors.name[0] }}</p>
@@ -331,7 +381,13 @@
               </div>
               <div>
                 <label class="form-label">Código de barras <span class="text-[11px] font-normal" style="color: var(--text-muted)">(EAN/UPC/QR — opcional)</span></label>
-                <input v-model="form.barcode" class="input font-mono" placeholder="1234567890128" />
+                <div class="flex gap-2">
+                  <input v-model="form.barcode" class="input font-mono flex-1 min-w-0" placeholder="1234567890128" />
+                  <button type="button" @click="openScanner(true)"
+                          class="btn-secondary !px-3 shrink-0" title="Escanear con la cámara">
+                    <QrCodeIcon class="w-4 h-4" />
+                  </button>
+                </div>
                 <p v-if="formErrors.barcode" class="mt-1 text-xs text-rose-500">{{ formErrors.barcode[0] }}</p>
               </div>
               <div>
@@ -367,7 +423,7 @@
                   <option value="par">Par</option>
                 </select>
               </div>
-              <div class="col-span-2">
+              <div class="sm:col-span-2">
                 <label class="form-label">Proveedor</label>
                 <input v-model="form.supplier" class="input" placeholder="Nombre del proveedor" />
               </div>
@@ -488,7 +544,8 @@
 
 <script setup>
 import { ref, reactive, computed, onMounted, onUnmounted } from 'vue'
-import { RouterLink, useRoute } from 'vue-router'
+import { useRoute } from 'vue-router'
+import BarcodeScanner from '@/components/pos/BarcodeScanner.vue'
 import {
   PlusIcon, PencilIcon, TrashIcon, XMarkIcon,
   MagnifyingGlassIcon, CubeIcon, ExclamationCircleIcon,
@@ -518,6 +575,68 @@ const form = reactive({
   stock_initial: 0, stock_minimum: 5,
   cost: 0, price: 0, unit: 'unidad', supplier: '',
 })
+
+// ── Escáner de código de barras ────────────────────────────────────────────
+// scanner.target: 'lookup' → busca el producto y decide qué hacer
+//                 'field'  → sólo rellena el campo del formulario abierto
+const scanner       = ref({ open: false, looking: false, lastCode: '', target: 'lookup' })
+const scannedNotice = ref('')
+
+function openScanner(fromForm = false) {
+  scanner.value = {
+    open: true,
+    looking: false,
+    lastCode: '',
+    target: fromForm === true ? 'field' : 'lookup',
+  }
+}
+
+function closeScanner() { scanner.value.open = false }
+
+async function handleScanned(rawCode) {
+  const code = String(rawCode || '').trim()
+  if (!code || scanner.value.looking) return
+
+  // Caso simple: sólo rellenar el campo del formulario ya abierto
+  if (scanner.value.target === 'field') {
+    form.barcode = code
+    scannedNotice.value = code
+    closeScanner()
+    toast.success('Código capturado.')
+    return
+  }
+
+  scanner.value.looking  = true
+  scanner.value.lastCode = code
+
+  try {
+    // Buscamos por código; el backend busca en name, sku, barcode y category
+    const { data } = await productsApi.list({ search: code, per_page: 10 })
+    const found = (data.data || []).find(
+      p => p.barcode === code || p.sku === code
+    )
+
+    closeScanner()
+
+    if (found) {
+      // Ya existe → abrir edición para ajustar datos
+      openEdit(found)
+      scannedNotice.value = ''
+      toast.info(`"${found.name}" ya existe. Puedes editarlo.`)
+    } else {
+      // No existe → nuevo producto con el código precargado
+      openCreate(code)
+      toast.success('Código nuevo. Completa los datos del producto.')
+    }
+  } catch (e) {
+    closeScanner()
+    // Si falla la búsqueda, igual dejamos crear el producto manualmente
+    openCreate(code)
+    toast.warning('No se pudo verificar el código. Puedes crear el producto igualmente.')
+  } finally {
+    scanner.value.looking = false
+  }
+}
 
 // ── Inline stock quick-adjust ──────────────────────────────────────────────
 const inlineEdit = ref(null) // { productId, name, current, delta, note, saving }
@@ -726,18 +845,27 @@ function openCreate(eventOrBarcode) {
   Object.assign(form, { name: '', sku: '', barcode: '', category: '', stock_initial: 0, stock_minimum: 5, cost: 0, price: 0, unit: 'unidad', supplier: '' })
   // Si el argumento es un string (viene del escáner), lo usamos.
   // Si es un evento de clic, lo ignoramos.
-  const barcode = (typeof eventOrBarcode === 'string' || typeof eventOrBarcode === 'number') ? eventOrBarcode : ''
-  if (barcode) form.barcode = barcode
+  const barcode = (typeof eventOrBarcode === 'string' || typeof eventOrBarcode === 'number')
+    ? String(eventOrBarcode)
+    : ''
+  if (barcode) {
+    form.barcode = barcode
+    form.sku     = barcode          // sugerencia: SKU = código escaneado (editable)
+    scannedNotice.value = barcode
+  } else {
+    scannedNotice.value = ''
+  }
   formErrors.value = {}; formError.value = ''; showModal.value = true
 }
 
 function openEdit(product) {
   editingProduct.value = product
+  scannedNotice.value = ''
   Object.assign(form, { name: product.name, sku: product.sku, barcode: product.barcode || '', category: product.category || '', stock_minimum: product.stock_minimum, cost: product.cost, price: product.price, unit: product.unit, supplier: product.supplier || '' })
   formErrors.value = {}; formError.value = ''; showModal.value = true
 }
 
-function closeModal() { showModal.value = false }
+function closeModal() { showModal.value = false; scannedNotice.value = '' }
 
 async function handleSave() {
   saving.value = true; formErrors.value = {}; formError.value = ''
@@ -780,10 +908,11 @@ onMounted(() => {
   fetchProducts()
   fetchCategories()
   document.addEventListener('click', handleOutsideClick)
-  // Si la URL tiene el parámetro 'barcode' y el modal no está abierto, abrir el modal de creación con ese código
-  if (route.params.barcode && !showModal.value) {
-    openCreate(route.params.barcode)
-  }
+  // Soporte opcional: /app/products?barcode=XXXX abre el alta con el código cargado
+  const qBarcode = route.query.barcode || route.params.barcode
+  if (qBarcode && !showModal.value) openCreate(String(qBarcode))
+  // Soporte opcional: /app/products?scan=1 abre directamente el escáner
+  if (route.query.scan) openScanner()
 })
 onUnmounted(() => {
   document.removeEventListener('click', handleOutsideClick)
@@ -797,11 +926,6 @@ onUnmounted(() => {
 }
 .badge-flash {
   animation: flash-border 2s ease-in-out infinite;
-}
-
-/* Estilo para el botón de escanear */
-.btn-success {
-  @apply bg-emerald-600 text-white hover:bg-emerald-700 focus:ring-emerald-500;
 }
 
 /* CSV modal transition */

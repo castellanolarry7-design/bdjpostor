@@ -1,15 +1,21 @@
 <!-- src/components/layout/AppLayout.vue -->
 <template>
-  <div class="flex h-screen overflow-hidden" style="background: var(--bg-primary)">
+  <div class="app-shell flex overflow-hidden" style="background: var(--bg-primary)">
 
     <!-- ─── Sidebar ──────────────────────────────────────────────────── -->
+    <!--
+      IMPORTANTE: en móvil el aside es `fixed` (fuera del flujo) para que NO
+      reste ancho al contenido. En >=md pasa a `relative` dentro del flex.
+      Antes se aplicaban `relative` y `fixed` a la vez y Tailwind daba
+      prioridad a `.relative`, por eso el contenido quedaba corrido a un lado.
+    -->
     <aside
       :class="[
-        'flex flex-col shrink-0 z-30 relative',
-        'transition-all duration-300 ease-in-out',
-        collapsed ? 'w-[68px]' : 'w-64',
-        sidebarOpen ? 'translate-x-0' : '-translate-x-full',
-        'md:translate-x-0 md:relative fixed inset-y-0 left-0',
+        'flex flex-col fixed inset-y-0 left-0 z-40',
+        'md:relative md:inset-auto md:z-30 md:shrink-0 md:translate-x-0',
+        'transition-transform duration-300 ease-in-out md:transition-[width]',
+        rail ? 'w-64 md:w-[68px]' : 'w-64',
+        sidebarOpen ? 'translate-x-0 shadow-2xl' : '-translate-x-full',
       ]"
       style="background: linear-gradient(180deg, var(--sidebar-from) 0%, var(--sidebar-to) 100%); border-right: 1px solid var(--sidebar-border);"
     >
@@ -17,7 +23,7 @@
       <!-- ── Logo + brand ─────────────────────────────────────────── -->
       <div
         class="flex items-center gap-3 px-4 shrink-0 overflow-hidden"
-        :class="collapsed ? 'py-4 justify-center' : 'py-5'"
+        :class="rail ? 'py-4 justify-center' : 'py-5'"
         style="border-bottom: 1px solid var(--sidebar-border); min-height: 68px"
       >
         <!-- Logo icon -->
@@ -32,7 +38,7 @@
 
         <!-- Brand text — hidden when collapsed -->
         <Transition name="label-fade">
-          <div v-if="!collapsed" class="min-w-0 flex-1">
+          <div v-if="!rail" class="min-w-0 flex-1">
             <p class="font-bold text-white text-sm leading-tight tracking-tight">JPStore</p>
             <p class="text-[11px] leading-tight truncate font-medium" style="color: var(--nav-text)">
               {{ auth.isSuperAdmin ? 'Super Admin' : auth.isCashier ? 'Cajero' : auth.tenantName }}
@@ -42,7 +48,7 @@
 
         <!-- Live dot -->
         <Transition name="label-fade">
-          <div v-if="!collapsed" class="shrink-0">
+          <div v-if="!rail" class="shrink-0">
             <div class="glow-dot" style="width: 7px; height: 7px" />
           </div>
         </Transition>
@@ -53,23 +59,23 @@
         @click="toggleCollapse"
         class="hidden md:flex absolute -right-3 top-[52px] w-6 h-6 rounded-full items-center justify-center z-40 transition-all duration-200 hover:scale-110"
         style="background: var(--bg-elevated); border: 1px solid var(--border); box-shadow: 0 2px 8px rgba(0,0,0,0.3); color: var(--text-muted)"
-        :title="collapsed ? 'Expandir menú' : 'Contraer menú'"
+        :title="rail ? 'Expandir menú' : 'Contraer menú'"
       >
-        <svg class="w-3 h-3 transition-transform duration-300" :class="collapsed ? 'rotate-0' : 'rotate-180'" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5">
+        <svg class="w-3 h-3 transition-transform duration-300" :class="rail ? 'rotate-0' : 'rotate-180'" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5">
           <path stroke-linecap="round" stroke-linejoin="round" d="M15 19l-7-7 7-7" />
         </svg>
       </button>
 
       <!-- ── Nav ─────────────────────────────────────────────────── -->
-      <nav class="flex-1 overflow-y-auto overflow-x-hidden py-4" :class="collapsed ? 'px-2' : 'px-3'">
+      <nav class="flex-1 overflow-y-auto overflow-x-hidden py-4" :class="rail ? 'px-2' : 'px-3'">
 
         <!-- Section label -->
         <Transition name="label-fade">
-          <p v-if="!collapsed" class="px-3 pb-2 pt-1 text-[9px] font-bold uppercase tracking-[0.15em]" style="color: var(--text-muted)">
+          <p v-if="!rail" class="px-3 pb-2 pt-1 text-[9px] font-bold uppercase tracking-[0.15em]" style="color: var(--text-muted)">
             {{ auth.isSuperAdmin ? 'Administración' : 'Navegación' }}
           </p>
         </Transition>
-        <div v-if="collapsed" class="w-full h-px mb-3" style="background: var(--border)" />
+        <div v-if="rail" class="w-full h-px mb-3" style="background: var(--border)" />
 
         <div class="space-y-0.5">
           <RouterLink
@@ -78,11 +84,11 @@
             :to="item.to"
             :class="[
               'nav-item group relative flex items-center rounded-xl text-sm font-medium transition-all duration-200 overflow-hidden',
-              collapsed ? 'justify-center px-0 py-3 mx-0' : 'gap-3 px-3 py-2.5',
+              rail ? 'justify-center px-0 py-3 mx-0' : 'gap-3 px-3 py-2.5',
               isActive(item.to) ? 'nav-item--active' : 'nav-item--idle',
             ]"
             :style="`animation-delay: ${idx * 30}ms`"
-            :title="collapsed ? item.label : undefined"
+            :title="rail ? item.label : undefined"
             @click="sidebarOpen = false"
           >
             <!-- Active glow bg -->
@@ -92,7 +98,7 @@
             <span
               v-if="isActive(item.to)"
               class="absolute left-0 rounded-r-full transition-all duration-300"
-              :class="collapsed ? 'top-1 bottom-1 w-[3px]' : 'top-2 bottom-2 w-0.5'"
+              :class="rail ? 'top-1 bottom-1 w-[3px]' : 'top-2 bottom-2 w-0.5'"
               style="background: #3b82f6; box-shadow: 0 0 10px #3b82f6"
             />
 
@@ -101,7 +107,7 @@
               :is="item.icon"
               class="shrink-0 transition-all duration-200 relative z-10"
               :class="[
-                collapsed ? 'w-[20px] h-[20px]' : 'w-[18px] h-[18px]',
+                rail ? 'w-[20px] h-[20px]' : 'w-[18px] h-[18px]',
                 !isActive(item.to) && 'group-hover:scale-110',
               ]"
               :style="isActive(item.to) ? 'color: #60a5fa' : 'color: var(--nav-text)'"
@@ -110,7 +116,7 @@
             <!-- Label -->
             <Transition name="label-fade">
               <span
-                v-if="!collapsed"
+                v-if="!rail"
                 class="truncate relative z-10 transition-all duration-200"
                 :style="isActive(item.to) ? 'color: #ffffff' : 'color: var(--nav-text)'"
               >
@@ -121,7 +127,7 @@
             <!-- Badge -->
             <Transition name="label-fade">
               <span
-                v-if="item.badge && !collapsed"
+                v-if="item.badge && !rail"
                 class="ml-auto shrink-0 text-[10px] font-bold px-1.5 py-0.5 rounded-full relative z-10"
                 style="background: rgba(59,130,246,0.25); color: #60a5fa"
               >
@@ -131,7 +137,7 @@
 
             <!-- Collapsed tooltip -->
             <div
-              v-if="collapsed"
+              v-if="rail"
               class="nav-tooltip pointer-events-none absolute left-full ml-3 px-2.5 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap z-50 opacity-0 group-hover:opacity-100 transition-all duration-150 translate-x-1 group-hover:translate-x-0"
               style="background: var(--bg-elevated); color: var(--text-primary); border: 1px solid var(--border); box-shadow: 0 4px 16px rgba(0,0,0,0.4)"
             >
@@ -143,18 +149,18 @@
       </nav>
 
       <!-- ── User footer ─────────────────────────────────────────── -->
-      <div :class="collapsed ? 'px-2 pb-3 pt-2' : 'px-3 pb-4 pt-3'" style="border-top: 1px solid var(--sidebar-border)">
+      <div :class="rail ? 'px-2 pb-3 pt-2' : 'px-3 pb-4 pt-3'" style="border-top: 1px solid var(--sidebar-border)">
 
         <!-- User card -->
         <div
           class="relative flex items-center rounded-xl mb-1.5 transition-all duration-200 cursor-default overflow-hidden"
-          :class="collapsed ? 'justify-center p-2' : 'gap-3 px-3 py-2.5'"
+          :class="rail ? 'justify-center p-2' : 'gap-3 px-3 py-2.5'"
           style="background: var(--nav-hover-bg)"
         >
           <!-- Avatar -->
           <div
             class="rounded-full flex items-center justify-center text-white font-bold shrink-0 transition-all duration-300"
-            :class="collapsed ? 'w-9 h-9 text-sm' : 'w-8 h-8 text-xs'"
+            :class="rail ? 'w-9 h-9 text-sm' : 'w-8 h-8 text-xs'"
             style="background: linear-gradient(135deg, #3b82f6, #1d4ed8); box-shadow: 0 0 12px rgba(59,130,246,0.35)"
           >
             {{ userInitials }}
@@ -162,7 +168,7 @@
 
           <!-- User info -->
           <Transition name="label-fade">
-            <div v-if="!collapsed" class="flex-1 min-w-0">
+            <div v-if="!rail" class="flex-1 min-w-0">
               <p class="text-white text-xs font-semibold truncate leading-tight">{{ auth.user?.name }}</p>
               <p class="text-[10px] truncate leading-tight" style="color: var(--nav-text)">{{ auth.user?.email }}</p>
             </div>
@@ -171,7 +177,7 @@
           <!-- Role badge (only expanded) -->
           <Transition name="label-fade">
             <span
-              v-if="!collapsed && auth.user?.role"
+              v-if="!rail && auth.user?.role"
               class="shrink-0 text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded-md"
               :style="roleBadgeStyle(auth.user.role)"
             >
@@ -181,7 +187,7 @@
 
           <!-- Collapsed tooltip -->
           <div
-            v-if="collapsed"
+            v-if="rail"
             class="nav-tooltip pointer-events-none absolute left-full ml-3 px-2.5 py-2 rounded-lg text-xs whitespace-nowrap z-50 opacity-0 group-hover:opacity-100"
             style="background: var(--bg-elevated); border: 1px solid var(--border)"
           >
@@ -195,16 +201,16 @@
           @click="handleLogout"
           :class="[
             'flex items-center w-full rounded-xl text-sm font-medium transition-all duration-200 group/logout',
-            collapsed ? 'justify-center p-2.5' : 'gap-3 px-3 py-2.5',
+            rail ? 'justify-center p-2.5' : 'gap-3 px-3 py-2.5',
           ]"
           style="color: #f87171"
           onmouseenter="this.style.background='rgba(244,63,94,0.1)'; this.style.color='#fca5a5'"
           onmouseleave="this.style.background=''; this.style.color='#f87171'"
-          :title="collapsed ? 'Cerrar sesión' : undefined"
+          :title="rail ? 'Cerrar sesión' : undefined"
         >
           <ArrowRightOnRectangleIcon class="w-[18px] h-[18px] shrink-0 transition-transform duration-200 group-hover/logout:translate-x-0.5" />
           <Transition name="label-fade">
-            <span v-if="!collapsed">Cerrar sesión</span>
+            <span v-if="!rail">Cerrar sesión</span>
           </Transition>
         </button>
       </div>
@@ -214,30 +220,34 @@
     <Transition name="fade">
       <div
         v-if="sidebarOpen"
-        class="fixed inset-0 z-20 md:hidden"
+        class="fixed inset-0 z-30 md:hidden"
         style="background: rgba(2,6,15,0.75); backdrop-filter: blur(4px)"
         @click="sidebarOpen = false"
       />
     </Transition>
 
     <!-- ─── Main content ──────────────────────────────────────────── -->
-    <div class="flex-1 flex flex-col min-w-0 overflow-hidden">
+    <div class="flex-1 flex flex-col min-w-0 w-full overflow-hidden">
 
       <!-- Topbar -->
       <header
-        class="h-14 flex items-center justify-between px-4 md:px-6 shrink-0"
+        class="h-14 flex items-center gap-1 px-2 sm:px-4 md:px-6 shrink-0"
         style="background: var(--bg-surface); border-bottom: 1px solid var(--border);"
       >
         <!-- Mobile hamburger -->
         <button
-          class="md:hidden p-2 rounded-lg transition-colors"
+          class="md:hidden p-2 -ml-1 rounded-lg transition-colors shrink-0"
           style="color: var(--text-secondary)"
-          onmouseenter="this.style.background='var(--bg-elevated)'"
-          onmouseleave="this.style.background=''"
+          aria-label="Abrir menú"
           @click="sidebarOpen = !sidebarOpen"
         >
-          <Bars3Icon class="w-5 h-5" />
+          <Bars3Icon class="w-6 h-6" />
         </button>
+
+        <!-- Título de página (móvil) -->
+        <h1 class="md:hidden text-sm font-semibold truncate min-w-0" style="color: var(--text-primary)">
+          {{ currentPageTitle }}
+        </h1>
 
         <!-- Breadcrumb -->
         <div class="hidden md:flex items-center gap-2">
@@ -252,7 +262,7 @@
         </div>
 
         <!-- Topbar actions -->
-        <div class="flex items-center gap-2 ml-auto">
+        <div class="flex items-center gap-1 sm:gap-2 ml-auto shrink-0">
           <!-- Tenant pill -->
           <span
             v-if="!auth.isSuperAdmin && auth.tenantName"
@@ -284,8 +294,8 @@
       </header>
 
       <!-- Page content -->
-      <main class="flex-1 overflow-y-auto p-4 md:p-6 lg:p-8">
-        <div class="max-w-screen-2xl mx-auto">
+      <main class="flex-1 overflow-y-auto overflow-x-hidden p-3 sm:p-4 md:p-6 lg:p-8 pb-[env(safe-area-inset-bottom)]">
+        <div class="max-w-screen-2xl mx-auto w-full min-w-0">
           <RouterView :key="route.name" />
         </div>
       </main>
@@ -298,7 +308,7 @@
 </template>
 
 <script setup>
-import { ref, computed } from 'vue'
+import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
 import { useRoute, RouterLink, RouterView } from 'vue-router'
 import {
   Squares2X2Icon,
@@ -323,12 +333,39 @@ const route = useRoute()
 const sidebarOpen = ref(false)
 const { open } = useGlobalSearch()
 
+// ── Detección de móvil (sin dependencias) ─────────────────────────────
+const isMobile = ref(false)
+let mq = null
+function syncIsMobile(e) { isMobile.value = e.matches }
+
 // ── Collapsible sidebar ───────────────────────────────────────────────
 const collapsed = ref(localStorage.getItem('jpstore_sidebar_collapsed') === 'true')
 function toggleCollapse() {
   collapsed.value = !collapsed.value
   localStorage.setItem('jpstore_sidebar_collapsed', collapsed.value)
 }
+
+// En móvil el sidebar es un drawer a ancho completo: nunca modo "rail".
+const rail = computed(() => collapsed.value && !isMobile.value)
+
+// Cerrar el drawer al pasar a escritorio y al cambiar de ruta
+watch(isMobile, (v) => { if (!v) sidebarOpen.value = false })
+watch(() => route.fullPath, () => { sidebarOpen.value = false })
+
+// Bloquear el scroll del body mientras el drawer está abierto en móvil
+watch(sidebarOpen, (open) => {
+  document.body.style.overflow = open && isMobile.value ? 'hidden' : ''
+})
+
+onMounted(() => {
+  mq = window.matchMedia('(max-width: 767px)')
+  isMobile.value = mq.matches
+  mq.addEventListener?.('change', syncIsMobile)
+})
+onUnmounted(() => {
+  mq?.removeEventListener?.('change', syncIsMobile)
+  document.body.style.overflow = ''
+})
 
 // ── Nav items ─────────────────────────────────────────────────────────
 const navItems = computed(() => {
@@ -409,11 +446,11 @@ async function handleLogout() {
 .label-fade-enter-from   { opacity: 0; transform: translateX(-6px) }
 .label-fade-leave-to     { opacity: 0; transform: translateX(-4px) }
 
-/* ── Overlay fade ─────────────────────────────────────────── */
+/* ── Overlay fade ────────────────────────────────── */
 .fade-enter-active, .fade-leave-active { transition: opacity 0.2s }
 .fade-enter-from, .fade-leave-to       { opacity: 0 }
 
-/* ── Nav item styles ──────────────────────────────────────── */
+/* ── Nav item styles ───────────────────────────── */
 .nav-item--active {
   background: rgba(59, 130, 246, 0.12);
 }
@@ -432,7 +469,6 @@ async function handleLogout() {
 
 /* Tooltip positioning */
 .nav-tooltip {
-  /* shown via group-hover in template — extra safety */
   transition: opacity 0.15s, transform 0.15s;
 }
 
@@ -443,5 +479,11 @@ async function handleLogout() {
 @keyframes nav-slide-in {
   from { opacity: 0; transform: translateX(-8px) }
   to   { opacity: 1; transform: translateX(0) }
+}
+
+/* En móvil el sidebar es un drawer: sin animación de entrada por ítem */
+@media (max-width: 767px) {
+  .nav-item { animation: none; }
+  .nav-item { min-height: 44px; }
 }
 </style>

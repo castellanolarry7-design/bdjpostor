@@ -96,6 +96,7 @@ class Product extends Model
         return $query->where(function ($q) use ($term) {
             $q->where('name', 'like', "%{$term}%")  // ilike = case-insensitive en PostgreSQL
               ->orWhere('sku', 'like', "%{$term}%")
+              ->orWhere('barcode', 'like', "%{$term}%")
               ->orWhere('category', 'like', "%{$term}%");
         });
     }
