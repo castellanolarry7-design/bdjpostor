@@ -8,8 +8,8 @@ return new class extends Migration {
     public function up(): void {
         Schema::create('sales', function (Blueprint $table) {
             $table->uuid('id')->primary();
-            $table->string('tenant_id');
-            $table->string('user_id');
+            $table->foreignUuid('tenant_id')->constrained()->cascadeOnDelete();
+            $table->foreignUuid('user_id')->constrained()->cascadeOnDelete();
             $table->string('sale_number', 50);
             $table->decimal('subtotal', 12, 2)->default(0);
             $table->decimal('tax', 12, 2)->default(0);
@@ -28,8 +28,8 @@ return new class extends Migration {
 
         Schema::create('sale_items', function (Blueprint $table) {
             $table->uuid('id')->primary();
-            $table->string('sale_id');
-            $table->string('product_id');
+            $table->foreignUuid('sale_id')->constrained()->cascadeOnDelete(); // No change needed here, it's correct
+            $table->foreignUuid('product_id')->constrained()->cascadeOnDelete(); // No change needed here, it's correct
             $table->string('product_name', 200);
             $table->string('product_sku', 100)->nullable();
             $table->unsignedInteger('quantity');

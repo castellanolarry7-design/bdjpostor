@@ -8,8 +8,8 @@ return new class extends Migration {
         Schema::create('inventory_movements', function (Blueprint $table) {
             $table->uuid('id')->primary();
             $table->foreignUuid('tenant_id')->constrained()->cascadeOnDelete();
-            $table->string('product_id');
-            $table->string('user_id')->nullable();
+            $table->foreignUuid('product_id')->constrained()->cascadeOnDelete(); // No change needed here, it's correct
+            $table->foreignUuid('user_id')->nullable()->constrained()->cascadeOnDelete(); // No change needed here, it's correct
             $table->enum('type', ['entrada', 'salida', 'ajuste']);
             $table->unsignedInteger('quantity');
             $table->unsignedInteger('stock_before')->default(0);
