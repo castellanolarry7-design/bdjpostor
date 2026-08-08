@@ -1,5 +1,6 @@
 // src/api/axios.js
 import axios from 'axios'
+import { useAuthStore } from '@/stores/auth'
 
 // Crear instancia base apuntando al backend Laravel
 const api = axios.create({
@@ -38,10 +39,12 @@ api.interceptors.response.use(
 
     // 401 — Token expirado o inválido
     // Solo redirigir si NO es el endpoint de login (para que LoginView pueda mostrar el error)
-    if (status === 401 && !error.config?.url?.includes('/auth/login')) {
-      localStorage.removeItem('jpstore_token')
-      localStorage.removeItem('jpstore_user')
-      window.location.href = '/login'
+    if (status === 401 && !error.config.url.includes('/auth/login')) {
+      const authStore = useAuthStore()
+      // Usar el método logout del store para limpiar el estado de forma centralizada
+      // y evitar recargas de página completas.
+      authStore.logout()
+
       return Promise.reject(error)
     }
 
@@ -62,5 +65,17 @@ api.interceptors.response.use(
     return Promise.reject(error)
   }
 )
+
+// ─── SINCRONIZACIÓN DE PESTAÑAS ───────────────────────────────────────────
+// Escucha los cambios en localStorage para mantener la sesión sincronizada
+// entre pestañas. Si el token se elimina en una pestaña (logout), las
+// otras pestañas reaccionarán y cerrarán la sesión también.
+window.addEventListener('storage', (event) => {
+  if (event.key === 'jpstore_token' && !event.newValue) {
+    console.log('Token eliminado en otra pestaña. Cerrando sesión local.')
+    const authStore = useAuthStore()
+    authStore.logout()
+  }
+})
 
 export default api

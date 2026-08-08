@@ -69,7 +69,7 @@ class AuthController extends Controller
         $token = $user->createToken(
             name: $request->device_name ?? 'api',
             abilities: $abilities,
-            expiresAt: now()->addDays(30) // El token expira en 30 días
+            expiresAt: null // El token no expira
         );
 
         // Actualizar último login
