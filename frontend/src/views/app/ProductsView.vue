@@ -15,6 +15,10 @@
           <ArrowUpTrayIcon class="w-4 h-4" />
           Importar CSV
         </button>
+        <RouterLink :to="{ name: 'product-scan' }" class="btn-success flex items-center gap-2">
+          <QrCodeIcon class="w-4 h-4" />
+          Escanear
+        </RouterLink>
         <button class="btn-primary flex items-center gap-2" @click="openCreate">
           <PlusIcon class="w-4 h-4" />
           Nuevo producto
@@ -484,16 +488,18 @@
 
 <script setup>
 import { ref, reactive, computed, onMounted, onUnmounted } from 'vue'
+import { RouterLink, useRoute } from 'vue-router'
 import {
   PlusIcon, PencilIcon, TrashIcon, XMarkIcon,
   MagnifyingGlassIcon, CubeIcon, ExclamationCircleIcon,
   CurrencyDollarIcon, ExclamationTriangleIcon,
-  PencilSquareIcon, ArrowUpTrayIcon, DocumentArrowDownIcon,
+  PencilSquareIcon, ArrowUpTrayIcon, DocumentArrowDownIcon, QrCodeIcon,
 } from '@heroicons/vue/24/outline'
 import { useToast } from 'vue-toastification'
 import { productsApi, movementsApi } from '@/api/services'
 
 const toast = useToast()
+const route = useRoute()
 
 const products   = ref([])
 const categories = ref([])
@@ -715,9 +721,10 @@ function debouncedFetch() {
 
 function changePage(page) { filters.page = page; fetchProducts() }
 
-function openCreate() {
+function openCreate(barcode = '') {
   editingProduct.value = null
   Object.assign(form, { name: '', sku: '', barcode: '', category: '', stock_initial: 0, stock_minimum: 5, cost: 0, price: 0, unit: 'unidad', supplier: '' })
+  if (barcode) form.barcode = barcode
   formErrors.value = {}; formError.value = ''; showModal.value = true
 }
 
@@ -770,6 +777,10 @@ onMounted(() => {
   fetchProducts()
   fetchCategories()
   document.addEventListener('click', handleOutsideClick)
+  // Si la URL tiene el parámetro 'barcode', abrir el modal de creación con ese código
+  if (route.params.barcode) {
+    openCreate(route.params.barcode)
+  }
 })
 onUnmounted(() => {
   document.removeEventListener('click', handleOutsideClick)
@@ -783,6 +794,11 @@ onUnmounted(() => {
 }
 .badge-flash {
   animation: flash-border 2s ease-in-out infinite;
+}
+
+/* Estilo para el botón de escanear */
+.btn-success {
+  @apply bg-emerald-600 text-white hover:bg-emerald-700 focus:ring-emerald-500;
 }
 
 /* CSV modal transition */

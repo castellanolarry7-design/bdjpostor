@@ -35,8 +35,8 @@ class AuthController extends Controller
      */
     public function login(LoginRequest $request): JsonResponse
     {
-        // Buscar usuario por email incluyendo soft-deleted (no permitir login)
-        $user = User::where('email', $request->email)->first();
+        // Buscar usuario por email. El `LoginRequest` ya valida que el email existe.
+        $user = User::firstWhere('email', $request->email);
 
         // Verificar que el usuario existe y la contraseña es correcta
         if (! $user || ! Hash::check($request->password, $user->password)) {
