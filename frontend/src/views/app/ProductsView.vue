@@ -721,9 +721,12 @@ function debouncedFetch() {
 
 function changePage(page) { filters.page = page; fetchProducts() }
 
-function openCreate(barcode = '') {
+function openCreate(eventOrBarcode) {
   editingProduct.value = null
   Object.assign(form, { name: '', sku: '', barcode: '', category: '', stock_initial: 0, stock_minimum: 5, cost: 0, price: 0, unit: 'unidad', supplier: '' })
+  // Si el argumento es un string (viene del escáner), lo usamos.
+  // Si es un evento de clic, lo ignoramos.
+  const barcode = typeof eventOrBarcode === 'string' ? eventOrBarcode : ''
   if (barcode) form.barcode = barcode
   formErrors.value = {}; formError.value = ''; showModal.value = true
 }
@@ -778,7 +781,7 @@ onMounted(() => {
   fetchCategories()
   document.addEventListener('click', handleOutsideClick)
   // Si la URL tiene el parámetro 'barcode', abrir el modal de creación con ese código
-  if (route.params.barcode) {
+  if (route.params.barcode && !showModal.value) {
     openCreate(route.params.barcode)
   }
 })
