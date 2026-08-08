@@ -81,7 +81,7 @@ class AuthController extends Controller
         return response()->json([
             'token'      => $token->plainTextToken,
             'token_type' => 'Bearer',
-            'expires_at' => $token->accessToken->expires_at,
+            'expires_at' => $token->accessToken->expires_at?->toISOString(),
             'user'       => new UserResource($user),
         ], 200);
     }
